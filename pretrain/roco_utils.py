@@ -73,10 +73,10 @@ def load_mlm_data(args):
     # test_image_names = os.listdir(os.path.join(test_path,'images'))
 
     train_data = pd.read_csv(os.path.join(train_path,'traindata.csv'))
-    train_data = train_data[train_data['name'].isin(train_image_names)]
+    train_data = train_data[train_data['PMC_ID'].isin(train_image_names)]
 
     val_data = pd.read_csv(os.path.join(val_path, 'valdata.csv'))
-    val_data = val_data[val_data['name'].isin(val_image_names)]
+    val_data = val_data[val_data['PMC_ID'].isin(val_image_names)]
 
     # test_data = pd.read_csv(os.path.join(test_path, 'testdata.csv'))
     # test_data = test_data[test_data['name'].isin(test_image_names)]
@@ -337,8 +337,9 @@ class ROCO(Dataset):
         return len(self.df)
 
     def __getitem__(self, idx):
-
-        name = self.df[idx,1]              
+        info = self.df.iloc[idx]
+        # name = self.df[idx,1] 
+        name = info['PMC_ID']             
         path = os.path.join(self.path, self.mode, 'radiology', 'images',name)
 
 
@@ -347,7 +348,8 @@ class ROCO(Dataset):
         if self.tfm:
             img = self.tfm(img)
     
-        caption = self.df[idx, 2].strip()
+        # caption = self.df[idx, 2].strip()
+        caption = info['caption'].strip()
     
         
         tokens, segment_ids, input_mask, targets = encode_text(caption, self.tokenizer, self.keys, self.args)

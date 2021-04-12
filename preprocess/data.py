@@ -21,10 +21,14 @@ def build_dataframe(split):
     df = result[columns]
     filename = 'traindata.csv' if split == 'train' else 'valdata.csv'
     print(filename)
-    df.to_csv(os.path.join(ROCO_PATH,split,filename), index=False, header=None)
+    df.to_csv(os.path.join(ROCO_PATH,split,filename), index=False, header=columns)
     return df
-# print(build_dataframe('train'))
-# print(build_dataframe('validation'))
+
+DATA_DF = False
+if DATA_DF:
+    train_df = build_dataframe('train')
+    val_df = build_dataframe('validation')
+# import IPython; IPython.embed(); exit(1)
 
 
 def count_keywords(split, keywords):
@@ -55,12 +59,11 @@ def count_keywords(split, keywords):
             
         return keywords
 
-
-keywords = {}
-keywords = count_keywords('train', keywords)
-keywords = count_keywords('validation', keywords)
-print('len',len(keywords))
-with open(os.path.join(ROCO_PATH,'vocab','med_vocab.pkl'), 'wb') as fp:
-    pickle.dump(keywords, fp, protocol=pickle.DEFAULT_PROTOCOL)
-# keywords = pd.read_csv(os.path.join(ROCO_PATH,'train',"keywords.txt"), sep='\t',names=['ROCO_ID','caption'],header=None)
-# print(keywords.iloc[0])
+KEYWORDS = False
+if KEYWORDS:
+    keywords = {}
+    keywords = count_keywords('train', keywords)
+    keywords = count_keywords('validation', keywords)
+    print('len',len(keywords))
+    with open(os.path.join(ROCO_PATH,'vocab','med_vocab.pkl'), 'wb') as fp:
+        pickle.dump(keywords, fp, protocol=pickle.DEFAULT_PROTOCOL)

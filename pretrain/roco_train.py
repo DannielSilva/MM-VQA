@@ -19,7 +19,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Pretrain on ROCO with MLM")
 
     parser.add_argument('-r', '--run_name', type=str, help="name for wandb run", required=True)
-    parser.add_argument('--data_dir', type=str, default = '/home/yash19/Datasets/all_data', help='path to dataset', required = False)
+    parser.add_argument('--data_dir', type=str, default = '/content/drive/MyDrive/TESE/Datasets/ROCO/roco-dataset/data', help='path to dataset', required = False)
     parser.add_argument('--save_dir', type=str, default = '/home/viraj.bagal/viraj/medvqa/Weights/roco_mlm', help='save model weights in this dir', required = False)
     parser.add_argument('--mlm_prob', type=float, required = True, help='probability of token being masked')
     parser.add_argument('--mixed_precision', action='store_true', required = False, default = False,  help='mixed precision training or not')
