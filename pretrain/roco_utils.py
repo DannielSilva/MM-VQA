@@ -62,14 +62,19 @@ def get_keywords(args):
 
     return keywords
 
+def load_image_names(data_dir, split):
+    with open(os.path.join(data_dir, split + '_image_names.pickle'), 'rb') as f:
+      image_names = pickle.load(f)
+
+    return image_names
 
 def load_mlm_data(args):
     train_path = os.path.join(args.data_dir,'train','radiology')
     val_path = os.path.join(args.data_dir,'validation','radiology')
     test_path = os.path.join(args.data_dir,'test','radiology')
 
-    train_image_names = os.listdir(os.path.join(train_path,'images'))
-    val_image_names = os.listdir(os.path.join(val_path,'images'))
+    train_image_names = load_image_names(train_path,'train')
+    val_image_names = load_image_names(val_path,'val')
     # test_image_names = os.listdir(os.path.join(test_path,'images'))
 
     train_data = pd.read_csv(os.path.join(train_path,'traindata.csv'))
@@ -228,7 +233,7 @@ def train_one_epoch(loader, model, criterion, optimizer, scaler, device, args, e
 
     return np.mean(train_loss), total_acc
 
-def validate(loader, model, criterion, scaler, device, args, epoch):
+def validate(loader, model, criterion, scaler, device, args, epoch, rec=True):
 
     model.eval()
     val_loss = []
@@ -276,9 +281,11 @@ def validate(loader, model, criterion, scaler, device, args, epoch):
 
             bar.set_description('val_loss: %.5f, val_acc: %.5f' % (loss_np, acc))
 
-            wandb.log({'step_val_loss': loss_np,
-                'step_val_acc': acc,
-                'val_batch': epoch*len(loader) + i})
+            if rec:
+              wandb.log({'step_val_loss': loss_np,
+                  'step_val_acc': acc,
+                  'val_batch': epoch*len(loader) + i})
+            
 
         val_loss = np.mean(val_loss)
 
@@ -288,7 +295,9 @@ def validate(loader, model, criterion, scaler, device, args, epoch):
     # Calculate total accuracy
     total_acc = (PREDS == TARGETS).mean() * 100.
 
-
+    if not rec:
+      print('epoch_val_loss', val_loss,
+                  'val_batch', total_acc)
     return val_loss, PREDS, total_acc
     
 def test(loader):
@@ -337,9 +346,10 @@ class ROCO(Dataset):
         return len(self.df)
 
     def __getitem__(self, idx):
-        info = self.df.iloc[idx]
+        #info = self.df.iloc[idx]
         # name = self.df[idx,1] 
-        name = info['PMC_ID']             
+        #name = info['PMC_ID']
+        name = self.df[idx,0]              
         path = os.path.join(self.path, self.mode, 'radiology', 'images',name)
 
 
@@ -349,8 +359,8 @@ class ROCO(Dataset):
             img = self.tfm(img)
     
         # caption = self.df[idx, 2].strip()
-        caption = info['caption'].strip()
-    
+        #caption = info['caption'].strip()
+        caption = self.df[idx, 1].strip()
         
         tokens, segment_ids, input_mask, targets = encode_text(caption, self.tokenizer, self.keys, self.args)
 

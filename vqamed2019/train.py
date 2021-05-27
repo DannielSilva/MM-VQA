@@ -1,5 +1,6 @@
+#import cv2
 import argparse
-from utils import seed_everything, Model, VQAMed, train_one_epoch, validate, test, load_data, LabelSmoothing, train_img_only, val_img_only, test_img_only
+from utils import seed_everything, Model, VQAMed, train_one_epoch, validate, test, load_data, LabelSmoothing, train_img_only, val_img_only, test_img_only, LabelSmoothByCategory
 import wandb
 import pandas as pd
 import numpy as np
@@ -12,25 +13,26 @@ from torchvision import transforms, models
 from torch.cuda.amp import GradScaler
 import os
 import warnings
-import albumentations as A
-import pretrainedmodels
-from albumentations.core.composition import OneOf
-from albumentations.pytorch.transforms import ToTensorV2
+#import albumentations as A
+#import pretrainedmodels
+#from albumentations.core.composition import OneOf
+#from albumentations.pytorch.transforms import ToTensorV2
 
 warnings.simplefilter("ignore", UserWarning)
 
 
 
 if __name__ == '__main__':
-
+    __spec__ = None
     parser = argparse.ArgumentParser(description = "Finetune on ImageClef 2019")
 
     parser.add_argument('--run_name', type = str, required = True, help = "run name for wandb")
-    parser.add_argument('--data_dir', type = str, required = False, default = "/home/viraj.bagal/viraj/medvqa/Dataset/Imageclef19/input/vqa-med-starter", help = "path for data")
-    parser.add_argument('--model_dir', type = str, required = False, default = "/home/viraj.bagal/viraj/medvqa/Weights/roco_mlm/val_loss_3.pt", help = "path to load weights")
-    parser.add_argument('--save_dir', type = str, required = False, default = "/home/viraj.bagal/viraj/medvqa/Weights/ic19", help = "path to save weights")
+    parser.add_argument('--data_dir', type = str, required = False, default = "ImageClef-2019-VQA-Med", help = "path for data")
+    parser.add_argument('--model_dir', type = str, required = False, default = "MMBERT/pretrain/val_loss_3.pt", help = "path to load weights")
+    parser.add_argument('--save_dir', type = str, required = False, default = "ImageClef-2019-VQA-Med/mmbert", help = "path to save weights")
     parser.add_argument('--category', type = str, required = False, default = None,  help = "choose specific category if you want")
     parser.add_argument('--use_pretrained', action = 'store_true', default = False, help = "use pretrained weights or not")
+    parser.add_argument('--resume_training', action = 'store_true', default = False, help = "resume")
     parser.add_argument('--mixed_precision', action = 'store_true', default = False, help = "use mixed precision or not")
     parser.add_argument('--clip', action = 'store_true', default = False, help = "clip the gradients or not")
 
@@ -58,10 +60,14 @@ if __name__ == '__main__':
     parser.add_argument('--heads', type = int, required = False, default = 12, help = "heads")
     parser.add_argument('--n_layers', type = int, required = False, default = 4, help = "num of layers")
     parser.add_argument('--num_vis', type = int, required = True, help = "num of visual embeddings")
+    
+    parser.add_argument('--wandb', action = 'store_false', default = True, help = "record in wandb or not")
+    parser.add_argument('--save_model_epoch', type = int, required = False, default = 4, help = "periodically save the model")
 
     args = parser.parse_args()
-
-    wandb.init(project='medvqa', name = args.run_name, config = args)
+    print(args.wandb)
+    if args.wandb:
+        wandb.init(project='medvqa', name = args.run_name, config = args) #settings=wandb.Settings(start_method='fork'),
 
     seed_everything(args.seed)
 
@@ -90,24 +96,44 @@ if __name__ == '__main__':
     num_classes = len(ans2idx)
 
     args.num_classes = num_classes
+    print('numclasses',num_classes)
 
-
+    
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
+    if torch.cuda.is_available():
+        print('cleaning cuda cache')
+        torch.cuda.empty_cache()
 
     model = Model(args)
 
     if args.use_pretrained:
+        print('loading model from roco')
+        print(args.model_dir)
         model.load_state_dict(torch.load(args.model_dir))
+        model.classifier[2] = nn.Linear(args.hidden_size, num_classes)
+##
+    if args.resume_training:
+        print('resume training')
+        model.classifier[2] = nn.Linear(args.hidden_size, num_classes)
+        before = args.run_name.split('-')[-1]
+        before = args.run_name.split(('-'))[0] + '-' + str(int(before)-1) +"_acc.pt"
+        path = os.path.join(args.save_dir, before)
+        print(path)
+        model.load_state_dict(torch.load(path))
 
-
-    model.classifier[2] = nn.Linear(args.hidden_size, num_classes)
+    if not args.use_pretrained and not args.resume_training:
+        print('from scratch')
+        model.classifier[2] = nn.Linear(args.hidden_size, num_classes)
+    
 
 
         
     model.to(device)
 
-    wandb.watch(model, log='all')
+    if args.wandb:
+        wandb.watch(model, log='all')
 
 
     optimizer = optim.Adam(model.parameters(),lr=args.lr)
@@ -115,7 +141,10 @@ if __name__ == '__main__':
 
 
     if args.smoothing:
-        criterion = LabelSmoothing(smoothing=args.smoothing)
+        print('smoothing')
+        #criterion = LabelSmoothing(smoothing=args.smoothing)
+        criterion = LabelSmoothByCategory(train_df=train_df,num_classes=args.num_classes,device=device)
+        print(criterion.plane_tensor)
     else:
         criterion = nn.CrossEntropyLoss()
 
@@ -125,6 +154,8 @@ if __name__ == '__main__':
     train_tfm = transforms.Compose([
                                     
                                     transforms.ToPILImage(),
+                                    transforms.Resize(224), #added with profs
+                                    transforms.CenterCrop(224), #added with profs
                                     transforms.RandomResizedCrop(224,scale=(0.75,1.25),ratio=(0.75,1.25)),
                                     transforms.RandomRotation(10),
                                     # Cutout(),
@@ -134,19 +165,23 @@ if __name__ == '__main__':
 
 
     val_tfm = transforms.Compose([transforms.ToPILImage(),
+                                transforms.Resize(224), #added with profs
+                                transforms.CenterCrop(224), #added with profs
                                 transforms.ToTensor(), 
                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
     test_tfm = transforms.Compose([transforms.ToPILImage(),
+                                transforms.Resize(224), #added with profs
+                                transforms.CenterCrop(224), #added with profs
                                 transforms.ToTensor(), 
                                  transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
 
 
 
-    traindataset = VQAMed(train_df, imgsize = args.image_size, tfm = train_tfm, args = args)
-    valdataset = VQAMed(val_df, imgsize = args.image_size, tfm = val_tfm, args = args)
-    testdataset = VQAMed(test_df, imgsize = args.image_size, tfm = test_tfm, args = args)
+    traindataset = VQAMed(train_df, imgsize = args.image_size, tfm = train_tfm, args = args, mode='train')
+    valdataset = VQAMed(val_df, imgsize = args.image_size, tfm = val_tfm, args = args, mode='eval')
+    testdataset = VQAMed(test_df, imgsize = args.image_size, tfm = test_tfm, args = args, mode='test')
 
     trainloader = DataLoader(traindataset, batch_size = args.batch_size, shuffle=True, num_workers = args.num_workers)
     valloader = DataLoader(valdataset, batch_size = args.batch_size, shuffle=False, num_workers = args.num_workers)
@@ -157,6 +192,11 @@ if __name__ == '__main__':
     best_loss = np.inf
     counter = 0
 
+    # criterion = LabelSmoothByCategory(train_df=train_df,num_classes=args.num_classes,device=device)
+    # for (img, question_token,segment_ids,attention_mask,target, imgid, category) in trainloader:
+    #     logits, _, _ = model(img, question_token, segment_ids, attention_mask)
+    #     loss = criterion(logits, target, category)
+    # import IPython; IPython.embed(); exit(1)
     for epoch in range(args.epochs):
 
         print(f'Epoch {epoch+1}/{args.epochs}')
@@ -179,12 +219,15 @@ if __name__ == '__main__':
             log_dict['train_loss'] = train_loss
             log_dict['test_loss'] = test_loss
             log_dict['learning_rate'] = optimizer.param_groups[0]["lr"]
+            log_dict['val_total_acc'] = val_acc['val_total_acc']
 
-            wandb.log(log_dict)
+            if args.wandb:
+                wandb.log(log_dict)
 
         else:
 
-            wandb.log({'train_loss': train_loss,
+            if args.wandb:
+                wandb.log({'train_loss': train_loss,
                         'val_loss': val_loss,
                         'test_loss': test_loss,
                         'learning_rate': optimizer.param_groups[0]["lr"],
@@ -197,22 +240,24 @@ if __name__ == '__main__':
 
         if not args.category:
 
-            if val_acc['total_acc'] > best_acc1:
+            if val_acc['val_total_acc'] > best_acc1:
+                print('Saving model')
                 torch.save(model.state_dict(),os.path.join(args.save_dir, f'{args.run_name}_acc.pt'))
-                best_acc1=val_acc['total_acc']
+                best_acc1=val_acc['val_total_acc']
 
         else:
 
-            if val_acc > best_acc1:
+            if val_acc['val_' + args.category + '_acc'] > best_acc1:
                 print('Saving model')
                 torch.save(model.state_dict(),os.path.join(args.save_dir, f'{args.run_name}_acc.pt'))
-                best_acc1 = val_acc 
+                best_acc1 = val_acc['val_' + args.category + '_acc'] 
 
+        # if (epoch + 1) % args.save_model_epoch == 0:
+        #     torch.save(model.state_dict(),os.path.join(args.save_dir, f'{args.run_name}_acc_epoch_{epoch}.pt'))
 
-
-        if val_acc > best_acc2:
+        if best_acc1 > best_acc2:
             counter = 0
-            best_acc2 = val_acc
+            best_acc2 = best_acc1
         else:
             counter+=1
             if counter > 20:

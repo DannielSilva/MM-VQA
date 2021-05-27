@@ -10,9 +10,9 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 from torchvision import transforms, models
 from torch.cuda.amp import GradScaler
-from torchtoolbox.transform import Cutout
+#from torchtoolbox.transform import Cutout
 import os
-import pytorch_lightning as pl
+#import pytorch_lightning as pl
 import warnings
 
 warnings.simplefilter("ignore", UserWarning)
@@ -24,9 +24,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description = "Evaluate")
 
     parser.add_argument('--run_name', type = str, required = True, help = "run name for wandb")
-    parser.add_argument('--data_dir', type = str, required = False, default = "/home/viraj.bagal/viraj/medvqa/Dataset/Imageclef19/input/vqa-med-starter", help = "path for data")
-    parser.add_argument('--model_dir', type = str, required = False, default = "/home/viraj.bagal/viraj/medvqa/Weights/ic19/exp01_ic19_mlm_abnorm_acc.pt", help = "path to load weights")
-    parser.add_argument('--save_dir', type = str, required = False, default = "/home/viraj.bagal/viraj/medvqa/Weights/ic19", help = "path to save weights")
+    parser.add_argument('--data_dir', type = str, required = False, default = "ImageClef-2019-VQA-Med", help = "path for data")
+    parser.add_argument('--model_dir', type = str, required = False, default = "ImageClef-2019-VQA-Med/mmbert/vqamed-roco-1_acc.pt", help = "path to load weights")
+    parser.add_argument('--save_dir', type = str, required = False, default = "ImageClef-2019-VQA-Med/mmbert", help = "path to save weights")
     parser.add_argument('--category', type = str, required = False, default = None,  help = "choose specific category if you want")
     parser.add_argument('--use_pretrained', action = 'store_true', default = False, help = "use pretrained weights or not")
     parser.add_argument('--mixed_precision', action = 'store_true', default = False, help = "use mixed precision or not")
@@ -55,11 +55,11 @@ if __name__ == '__main__':
     parser.add_argument('--type_vocab_size', type = int, required = False, default = 2, help = "type vocab size")
     parser.add_argument('--heads', type = int, required = False, default = 12, help = "heads")
     parser.add_argument('--n_layers', type = int, required = False, default = 4, help = "num of layers")
-
+    parser.add_argument('--num_vis', type = int, required = True, help = "num of visual embeddings")
 
     args = parser.parse_args()
 
-    wandb.init(project='medvqa', name = args.run_name, config = args)
+    #wandb.init(project='medvqa', name = args.run_name, config = args)
 
     seed_everything(args.seed)
 
@@ -105,7 +105,7 @@ if __name__ == '__main__':
         
     model.to(device)
 
-    wandb.watch(model, log='all')
+    #wandb.watch(model, log='all')
 
 
     optimizer = optim.Adam(model.parameters(),lr=args.lr)
@@ -120,8 +120,10 @@ if __name__ == '__main__':
     scaler = GradScaler()
 
 
-    test_tfm = transforms.Compose([transforms.ToTensor(), 
-                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    test_tfm = transforms.Compose([transforms.Resize(224), #added with profs
+                                   transforms.CenterCrop(224), #added with profstransforms.ToTensor(),
+                                   transforms.ToTensor(), 
+                                   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
 
 
@@ -140,7 +142,12 @@ if __name__ == '__main__':
     test_df['preds'] = predictions
     test_df['decode_preds'] = test_df['preds'].map(idx2ans)
     test_df['decode_ans'] = test_df['answer'].map(idx2ans)
-    test_df.to_csv(f'test_csvs/{args.category}_test_mlm_preds.csv', index = False)
-
+    test_df.to_csv(f'ImageClef-2019-VQA-Med/mmbert/{args.category}_test_mlm_preds.csv', index = False)
+    
+    result = test_df[['img_id', 'decode_preds']]
+    result['img_id'] = result['img_id'].apply(lambda x: x.split('/')[-1].split('.')[0])
+    result.to_csv(f'ImageClef-2019-VQA-Med/mmbert/res.txt', index = False, header=False, sep='|')
+    print('acc', acc)
+    print('bleu', bleu)
 
             
