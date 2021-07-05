@@ -115,18 +115,16 @@ def distillation(caption, tokenizer, clinicalbert, args):
     new_tokens.extend(t)
 
     item = tokenizer(caption) 
-    length = len(item['input_ids']) - 1 # remove CLS and SEP tokens
-    input_ids = torch.tensor(item['input_ids'][1:length], dtype=torch.long).unsqueeze(dim=0)
-    attention_mask = torch.tensor(item['attention_mask'][1:length], dtype=torch.long).unsqueeze(dim=0)
+    input_ids = torch.tensor(item['input_ids'], dtype=torch.long).unsqueeze(dim=0)
+    attention_mask = torch.tensor(item['attention_mask'], dtype=torch.long).unsqueeze(dim=0)
     out = clinicalbert(input_ids, attention_mask, output_hidden_states=True)
 
     last = out[0].squeeze()
 
-    for token in last:
-        output_label.append(token)
-
-    #import IPython; IPython.embed(); exit(0)
-    assert (len(new_tokens)==len(output_label)), "Token len must be equal to label len"
+    length = len(item['input_ids']) - 1 # the output of the MMBERT only expects corresponding tokens
+                                        # of the caption without CLS and SEP tokens // [1:length]
+    output_label = last[1:length] #remove CLS
+    assert (len(new_tokens)==output_label.shape[0]), "Token len must be equal to label len"
     
     return  new_tokens, output_label
 
@@ -186,10 +184,13 @@ def encode_text(caption,tokenizer, keywords, args, clinicalbert):
         labels.extend([0]*(n_pad))
         labels = torch.tensor(labels)
     else:
-        labels = [torch.zeros(768, dtype=torch.float)]*(2+len(part1)) + labels + [torch.zeros(768, dtype=torch.float)]
-        labels.extend([torch.zeros(768, dtype=torch.float)]*(n_pad))
-        labels = torch.stack(labels,dim=0)
-    #import IPython; IPython.embed(); exit(0)
+        # labels = [torch.zeros(768, dtype=torch.float)]*(2+len(part1)) + labels + [torch.zeros(768, dtype=torch.float)]
+        # labels.extend([torch.zeros(768, dtype=torch.float)]*(n_pad))
+        # labels = torch.stack(labels,dim=0)
+
+        labels = torch.cat([torch.zeros((2+len(part1)),768, dtype=torch.float), labels, torch.zeros(1,768, dtype=torch.float)], dim=0)
+        labels = torch.cat([labels, torch.zeros(n_pad, 768, dtype=torch.float)], dim=0)
+
     return torch.tensor(tokens,dtype=torch.long), torch.tensor(segment_ids,dtype=torch.long), torch.tensor(input_mask,dtype=torch.long), labels#torch.tensor(labels)
 
 
@@ -422,12 +423,10 @@ class ROCO(Dataset):
         caption = self.df[idx, 2].strip()
         #caption = info['caption'].strip()
         #caption = self.df.iloc[idx]['caption'].strip()
-        print('aquii')
+        
         
         tokens, segment_ids, input_mask, targets = encode_text(caption, self.tokenizer, self.keys, self.args, self.clinicalbert)
 
-        print('aqui', type(tokens), type(segment_ids), type(input_mask), type(targets))
-        print('aqui', tokens.shape, segment_ids.shape, input_mask.shape, targets.shape)
         return img, tokens, segment_ids, input_mask, targets
 
 
