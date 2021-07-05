@@ -22,7 +22,7 @@ import torch.optim as optim
 from transformers import BertTokenizer, BertModel
 import os
 from PIL import Image
-
+from transformers import AutoTokenizer, AutoModel
 
 def seed_everything(seed):
     random.seed(seed)
@@ -73,15 +73,17 @@ def load_mlm_data(args):
     val_path = os.path.join(args.data_dir,'validation','radiology')
     test_path = os.path.join(args.data_dir,'test','radiology')
 
-    train_image_names = load_image_names(train_path,'train')
-    val_image_names = load_image_names(val_path,'val')
+    train_image_names = os.listdir(os.path.join(train_path,'images'))
+    val_image_names = os.listdir(os.path.join(val_path,'images'))
+    # train_image_names = load_image_names(train_path,'train')
+    # val_image_names = load_image_names(val_path,'val')
     # test_image_names = os.listdir(os.path.join(test_path,'images'))
 
     train_data = pd.read_csv(os.path.join(train_path,'traindata.csv'))
-    train_data = train_data[train_data['PMC_ID'].isin(train_image_names)]
+    train_data = train_data[train_data['name'].isin(train_image_names)]
 
     val_data = pd.read_csv(os.path.join(val_path, 'valdata.csv'))
-    val_data = val_data[val_data['PMC_ID'].isin(val_image_names)]
+    val_data = val_data[val_data['name'].isin(val_image_names)]
 
     # test_data = pd.read_csv(os.path.join(test_path, 'testdata.csv'))
     # test_data = test_data[test_data['name'].isin(test_image_names)]
@@ -105,6 +107,28 @@ def shuffle_list(some_list):
 #Utils
 def gelu(x):
     return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
+
+def distillation(caption, tokenizer, clinicalbert, args):
+    output_label = []
+    new_tokens = []
+    t = tokenizer.tokenize(caption) 
+    new_tokens.extend(t)
+
+    item = tokenizer(caption) 
+    length = len(item['input_ids']) - 1 # remove CLS and SEP tokens
+    input_ids = torch.tensor(item['input_ids'][1:length], dtype=torch.long).unsqueeze(dim=0)
+    attention_mask = torch.tensor(item['attention_mask'][1:length], dtype=torch.long).unsqueeze(dim=0)
+    out = clinicalbert(input_ids, attention_mask, output_hidden_states=True)
+
+    last = out[0].squeeze()
+
+    for token in last:
+        output_label.append(token)
+
+    #import IPython; IPython.embed(); exit(0)
+    assert (len(new_tokens)==len(output_label)), "Token len must be equal to label len"
+    
+    return  new_tokens, output_label
 
 
 def mask_word(sentence, tokenizer, keywords, args):
@@ -134,10 +158,14 @@ def mask_word(sentence, tokenizer, keywords, args):
     
     return  new_tokens, output_label
 
-def encode_text(caption,tokenizer, keywords, args):
+def encode_text(caption,tokenizer, keywords, args, clinicalbert):
     part1 = [0 for _ in range(5)]
     #get token ids and remove [CLS] and [SEP] token id
-    caption, labels = mask_word(caption, tokenizer, keywords, args)
+    if args.task == 'MLM':
+        caption, labels = mask_word(caption, tokenizer, keywords, args)
+    else:
+        #part1 = [torch.zeros(768, dtype=torch.float) for _ in range(5)]
+        caption, labels = distillation(caption, tokenizer, clinicalbert, args)
 
     
     part2 = tokenizer.convert_tokens_to_ids(caption)
@@ -145,7 +173,7 @@ def encode_text(caption,tokenizer, keywords, args):
     labels = labels[:args.max_position_embeddings-8]
     
     tokens = [tokenizer.cls_token_id] + part1 + [tokenizer.sep_token_id] + part2 + [tokenizer.sep_token_id]
-    labels = [0]*(2+len(part1)) + labels + [0]
+    #labels = [0]*(2+len(part1)) + labels + [0]
     
     segment_ids = [0]*(len(part1)+2) + [1]*(len(part2[:args.max_position_embeddings-8])+1)
     input_mask = [1]*len(tokens)
@@ -153,10 +181,16 @@ def encode_text(caption,tokenizer, keywords, args):
     tokens.extend([0]*n_pad)
     segment_ids.extend([0]*n_pad)
     input_mask.extend([0]*n_pad)
-    labels.extend([0]*(n_pad))
-
-    
-    return torch.tensor(tokens,dtype=torch.long), torch.tensor(segment_ids,dtype=torch.long), torch.tensor(input_mask,dtype=torch.long), torch.tensor(labels)
+    if args.task == 'MLM':
+        labels = [0]*(2+len(part1)) + labels + [0]
+        labels.extend([0]*(n_pad))
+        labels = torch.tensor(labels)
+    else:
+        labels = [torch.zeros(768, dtype=torch.float)]*(2+len(part1)) + labels + [torch.zeros(768, dtype=torch.float)]
+        labels.extend([torch.zeros(768, dtype=torch.float)]*(n_pad))
+        labels = torch.stack(labels,dim=0)
+    #import IPython; IPython.embed(); exit(0)
+    return torch.tensor(tokens,dtype=torch.long), torch.tensor(segment_ids,dtype=torch.long), torch.tensor(input_mask,dtype=torch.long), labels#torch.tensor(labels)
 
 
 def calculate_bleu_score(preds,targets):
@@ -170,7 +204,7 @@ def train_one_epoch(loader, model, criterion, optimizer, scaler, device, args, e
     train_loss = []
     PREDS = []
     TARGETS = []
-    bar = tqdm(loader, leave = False)
+    bar = tqdm(loader)
     for i, (img, caption_token,segment_ids,attention_mask,target) in enumerate(bar):
 
         img, caption_token,segment_ids,attention_mask,target = img.to(device), caption_token.to(device), segment_ids.to(device), attention_mask.to(device), target.to(device)
@@ -254,46 +288,62 @@ def validate(loader, model, criterion, scaler, device, args, epoch, rec=True):
             if args.mixed_precision:
                 with torch.cuda.amp.autocast():
                     logits = model(img, caption_token, segment_ids, attention_mask)
-                    logits = logits.log_softmax(-1)  # (bs x seq_len x vocab_size)
-                    loss = loss_func(logits.permute(0,2,1), target)
+                    if args.task == 'MLM':
+                        logits = logits.log_softmax(-1)  # (bs x seq_len x vocab_size)
+                        loss = loss_func(logits.permute(0,2,1), target)
+                    else:
+                        loss = loss_func(logits, target)
             else:
                 logits = model(img, caption_token, segment_ids, attention_mask)
-                logits = logits.log_softmax(-1)  # (bs x seq_len x vocab_size)
-                loss = loss_func(logits.permute(0,2,1), target)       
+                if args.task == 'MLM':
+                    logits = logits.log_softmax(-1)  # (bs x seq_len x vocab_size)
+                    loss = loss_func(logits.permute(0,2,1), target)
+                else:
+                    loss = loss_func(logits, target)
+                    #import IPython; IPython.embed(); exit(0)       
 
 
             # logits = model(img, caption_token, segment_ids, attention_mask)
             # logits = logits.log_softmax(-1)  # (bs x seq_len x vocab_size)
             # loss = loss_func(logits.permute(0,2,1), target)
 
-            bool_label = target > 0
-            pred = logits[bool_label, :].argmax(1)
-            valid_labels = target[bool_label]   
-        
-            PREDS.append(pred)
-            TARGETS.append(valid_labels)
+            if args.task == 'MLM':
+                bool_label = target > 0
+                pred = logits[bool_label, :].argmax(1)
+                valid_labels = target[bool_label]   
             
+                PREDS.append(pred)
+                TARGETS.append(valid_labels)
+                
+                acc = (pred == valid_labels).type(torch.float).mean() * 100.
+
             loss_np = loss.detach().cpu().numpy()
 
             val_loss.append(loss_np)
 
-            acc = (pred == valid_labels).type(torch.float).mean() * 100.
+            if args.task == 'MLM':
+                bar.set_description('val_loss: %.5f, val_acc: %.5f' % (loss_np, acc))
+            else:
+                bar.set_description('val_loss: %.5f' % (loss_np))
 
-            bar.set_description('val_loss: %.5f, val_acc: %.5f' % (loss_np, acc))
 
-            if rec:
-              wandb.log({'step_val_loss': loss_np,
-                  'step_val_acc': acc,
-                  'val_batch': epoch*len(loader) + i})
+            # if rec:
+            #   wandb.log({'step_val_loss': loss_np,
+            #       'step_val_acc': acc,
+            #       'val_batch': epoch*len(loader) + i})
             
 
         val_loss = np.mean(val_loss)
 
-    PREDS = torch.cat(PREDS).cpu().numpy()
-    TARGETS = torch.cat(TARGETS).cpu().numpy()
+    if args.task == 'MLM':
+        PREDS = torch.cat(PREDS).cpu().numpy()
+        TARGETS = torch.cat(TARGETS).cpu().numpy()
 
-    # Calculate total accuracy
-    total_acc = (PREDS == TARGETS).mean() * 100.
+        # Calculate total accuracy
+        total_acc = (PREDS == TARGETS).mean() * 100.
+
+    else:
+        total_acc = None
 
     if not rec:
       print('epoch_val_loss', val_loss,
@@ -340,16 +390,27 @@ class ROCO(Dataset):
         self.tfm = tfm
         self.keys = keys
         self.mode = mode
-        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+
+        if args.task == 'distillation':
+            self.tokenizer = AutoTokenizer.from_pretrained(args.clinicalbert)
+        else:
+            self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+
+        self.clinicalbert = None
+
+        # if args.task == 'MLM':
+        #     self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        if args.task == 'distillation':
+            self.clinicalbert = AutoModel.from_pretrained(args.clinicalbert)
         
     def __len__(self):
         return len(self.df)
 
     def __getitem__(self, idx):
         #info = self.df.iloc[idx]
-        # name = self.df[idx,1] 
+        name = self.df[idx,1] 
         #name = info['PMC_ID']
-        name = self.df[idx,0]              
+                 
         path = os.path.join(self.path, self.mode, 'radiology', 'images',name)
 
 
@@ -358,13 +419,15 @@ class ROCO(Dataset):
         if self.tfm:
             img = self.tfm(img)
     
-        # caption = self.df[idx, 2].strip()
+        caption = self.df[idx, 2].strip()
         #caption = info['caption'].strip()
-        caption = self.df[idx, 1].strip()
+        #caption = self.df.iloc[idx]['caption'].strip()
+        print('aquii')
         
-        tokens, segment_ids, input_mask, targets = encode_text(caption, self.tokenizer, self.keys, self.args)
+        tokens, segment_ids, input_mask, targets = encode_text(caption, self.tokenizer, self.keys, self.args, self.clinicalbert)
 
-        
+        print('aqui', type(tokens), type(segment_ids), type(input_mask), type(targets))
+        print('aqui', tokens.shape, segment_ids.shape, input_mask.shape, targets.shape)
         return img, tokens, segment_ids, input_mask, targets
 
 
@@ -628,7 +691,12 @@ class BertLayer(nn.Module):
 class Transformer(nn.Module):
     def __init__(self, args):
         super(Transformer,self).__init__()
-        base_model = BertModel.from_pretrained('bert-base-uncased')
+        if args.task == 'distillation':
+            bert_name = args.clinicalbert
+        else:
+            bert_name = 'bert-base-uncased'
+
+        base_model = AutoModel.from_pretrained(bert_name)
         bert_model = nn.Sequential(*list(base_model.children())[0:])
         self.bert_embedding = bert_model[0]
 #         self.embed = Embeddings(args)
@@ -662,9 +730,13 @@ class Model(nn.Module):
         self.classifier = nn.Sequential(nn.Linear(args.hidden_size, args.hidden_size),
                                         nn.LayerNorm(args.hidden_size, eps=1e-12, elementwise_affine=True),
                                         nn.Linear(args.hidden_size, args.vocab_size))
+        self.task = args.task
     def forward(self, img, input_ids, segment_ids, input_mask):
         h = self.transformer(img, input_ids, segment_ids, input_mask)
-        pooled_h = self.activ1(self.fc1(h))
-        logits = self.classifier(pooled_h)
+        if self.task == 'MLM':
+            pooled_h = self.activ1(self.fc1(h))
+            logits = self.classifier(pooled_h)
+        else:
+            logits = h
         return logits
 

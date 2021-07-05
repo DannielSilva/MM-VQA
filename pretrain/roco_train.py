@@ -15,15 +15,19 @@ from torch.optim import lr_scheduler
 from roco_utils import load_mlm_data, train_one_epoch, validate, get_keywords, Model, ROCO
 
 if __name__ == '__main__':
-
+    __spec__ = None
     parser = argparse.ArgumentParser(description="Pretrain on ROCO with MLM")
 
     parser.add_argument('-r', '--run_name', type=str, help="name for wandb run", required=True)
-    parser.add_argument('--data_dir', type=str, default = '/content/drive/MyDrive/TESE/Datasets/ROCO/roco-dataset/data', help='path to dataset', required = False)
-    parser.add_argument('--save_dir', type=str, default = '/content/drive/MyDrive/TESE/Datasets/ROCO/roco-dataset', help='save model weights in this dir', required = False)
+    parser.add_argument('--data_dir', type=str, default = 'roco', help='path to dataset', required = False)
+    parser.add_argument('--save_dir', type=str, default = 'MMBERT/pretrain/save', help='save model weights in this dir', required = False)
     parser.add_argument('--mlm_prob', type=float, required = True, help='probability of token being masked')
     parser.add_argument('--mixed_precision', action='store_true', required = False, default = False,  help='mixed precision training or not')
     parser.add_argument('--resume', action='store_true', required = False, default = False,  help='resume training or train from scratch')
+
+    parser.add_argument('--task', type=str, default='MLM',
+                        choices=['MLM', 'distillation'], help='pretrain task for the model to be trained on')
+    parser.add_argument('--clinicalbert', type=str, default='emilyalsentzer/Bio_ClinicalBERT')
 
     parser.add_argument('--batch_size', type=int, default=16, help='batch_size.')
     parser.add_argument('--lr', type=float, default=2e-5, help='learning rate')
@@ -52,7 +56,7 @@ if __name__ == '__main__':
 
     train_data, val_data  = load_mlm_data(args)
     # No Image: PMC4240561_MA-68-291-g002.jpg
-    train_data = train_data[train_data['PMC_ID']!='PMC4345544_yjbm_88_1_93_g04.jpg'].reset_index(drop=True)
+    train_data = train_data[train_data['name']!='PMC4345544_yjbm_88_1_93_g04.jpg'].reset_index(drop=True)
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -64,19 +68,27 @@ if __name__ == '__main__':
 
     optimizer = optim.Adam(model.parameters(),lr=args.lr)
     scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, patience = args.patience, factor = args.factor, verbose = True)
-    criterion = nn.NLLLoss()
+    if args.task == 'MLM':
+        criterion = nn.NLLLoss()
+    else:
+        criterion = nn.MSELoss()
 
 
     # Be careful with the transforms. These medical images must remain meaningful after transform
 
-    train_tfm = transforms.Compose([transforms.Resize((224,224)), 
+    train_tfm = transforms.Compose([
+                                
+                                transforms.Resize(224), #added with profs
+                                transforms.CenterCrop(224), #added with profs
                                 transforms.RandomResizedCrop(224,scale=(0.95,1.05),ratio=(0.95,1.05)),
                                 transforms.RandomRotation(5),
                                 transforms.ColorJitter(brightness=0.05,contrast=0.05,saturation=0.05,hue=0.05),
                                 transforms.ToTensor(), 
                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-    val_tfm = transforms.Compose([transforms.Resize((224,224)), 
+    val_tfm = transforms.Compose([
+                                transforms.Resize(224), #added with profs
+                                transforms.CenterCrop(224), #added with profs
                                 transforms.ToTensor(), 
                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
