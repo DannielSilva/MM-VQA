@@ -28,6 +28,7 @@ if __name__ == '__main__':
     parser.add_argument('--task', type=str, default='MLM',
                         choices=['MLM', 'distillation'], help='pretrain task for the model to be trained on')
     parser.add_argument('--clinicalbert', type=str, default='emilyalsentzer/Bio_ClinicalBERT')
+    parser.add_argument('--max_token_length', type=int, default=512, help='max token length for the transformer in distillation')
 
     parser.add_argument('--batch_size', type=int, default=16, help='batch_size.')
     parser.add_argument('--lr', type=float, default=2e-5, help='learning rate')
@@ -51,7 +52,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    wandb.init(project='medvqa', name = args.run_name, config = args)
+    #wandb.init(project='medvqa', name = args.run_name, config = args)
 
 
     train_data, val_data  = load_mlm_data(args)
@@ -64,7 +65,7 @@ if __name__ == '__main__':
 
     model.to(device)
 
-    wandb.watch(model, log='all')
+    #wandb.watch(model, log='all')
 
     optimizer = optim.Adam(model.parameters(),lr=args.lr)
     scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, patience = args.patience, factor = args.factor, verbose = True)
@@ -123,9 +124,9 @@ if __name__ == '__main__':
 
     save_recorder = 5
 
-    val_loss, predictions, acc = validate(valloader, model, criterion, scaler, device, args, epoch=0, rec=False)
-    best_loss = val_loss
-    print(best_loss)
+    # val_loss, predictions, acc = validate(valloader, model, criterion, scaler, device, args, epoch=0, rec=False)
+    # best_loss = val_loss
+    # print(best_loss)
     for epoch in range(args.epochs):
         
         print(f'Epoch {epoch+1}/{args.epochs}')
@@ -145,12 +146,18 @@ if __name__ == '__main__':
             torch.save(recorder, os.path.join(args.save_dir, 'recorder_2.pt'))
             
 
-        wandb.log({'epoch_train_loss': train_loss,
-                'epoch_val_loss': val_loss,
-                'epoch_train_acc': train_acc,
-                'epoch_val_acc': acc,
-                'learning_rate': optimizer.param_groups[0]["lr"],
-                'epoch': epoch})
+        '''if args.task == 'MLM':
+            wandb.log({'epoch_train_loss': train_loss,
+                    'epoch_val_loss': val_loss,
+                    'epoch_train_acc': train_acc,
+                    'epoch_val_acc': acc,
+                    'learning_rate': optimizer.param_groups[0]["lr"],
+                    'epoch': epoch})
+        else:
+            wandb.log({'epoch_train_loss': train_loss,
+                    'epoch_val_loss': val_loss,
+                    'learning_rate': optimizer.param_groups[0]["lr"],
+                    'epoch': epoch})'''
 
         content = f'Learning rate: {(optimizer.param_groups[0]["lr"]):.7f}, Train loss: {(train_loss):.4f}, Train acc: {(train_acc):.4f} ,Val loss: {(val_loss):.4f}, Val acc: {(acc):.4f}'
         print(content)

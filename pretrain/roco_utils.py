@@ -111,15 +111,17 @@ def gelu(x):
 def distillation(caption, tokenizer, clinicalbert, args):
     output_label = []
     new_tokens = []
-    t = tokenizer.tokenize(caption) 
+
+    t = tokenizer.tokenize(caption,truncation=True, max_length=(args.max_token_length-2)) #max length without [CLS] and [SEP]
+
     new_tokens.extend(t)
 
-    item = tokenizer(caption) 
-    input_ids = torch.tensor(item['input_ids'], dtype=torch.long).unsqueeze(dim=0)
-    attention_mask = torch.tensor(item['attention_mask'], dtype=torch.long).unsqueeze(dim=0)
-    out = clinicalbert(input_ids, attention_mask, output_hidden_states=True)
-
-    last = out[0].squeeze()
+    item = tokenizer(caption, truncation=True) 
+    with torch.no_grad():
+        input_ids = torch.tensor(item['input_ids'], dtype=torch.long).unsqueeze(dim=0)
+        attention_mask = torch.tensor(item['attention_mask'], dtype=torch.long).unsqueeze(dim=0)
+        out = clinicalbert(input_ids, attention_mask, output_hidden_states=True)
+        last = out[0].squeeze()
 
     length = len(item['input_ids']) - 1 # the output of the MMBERT only expects corresponding tokens
                                         # of the caption without CLS and SEP tokens // [1:length]
@@ -219,12 +221,18 @@ def train_one_epoch(loader, model, criterion, optimizer, scaler, device, args, e
         if args.mixed_precision:
             with torch.cuda.amp.autocast():
                 logits = model(img, caption_token, segment_ids, attention_mask)
-                logits = logits.log_softmax(-1)  # (bs x seq_len x vocab_size)
-                loss = loss_func(logits.permute(0,2,1), target)
+                if args.task == 'MLM':
+                    logits = logits.log_softmax(-1)  # (bs x seq_len x vocab_size)
+                    loss = loss_func(logits.permute(0,2,1), target)
+                else:
+                    loss = loss_func(logits, target)
         else:
             logits = model(img, caption_token, segment_ids, attention_mask)
-            logits = logits.log_softmax(-1)  # (bs x seq_len x vocab_size)
-            loss = loss_func(logits.permute(0,2,1), target)       
+            if args.task == 'MLM':
+                    logits = logits.log_softmax(-1)  # (bs x seq_len x vocab_size)
+                    loss = loss_func(logits.permute(0,2,1), target)
+            else:
+                loss = loss_func(logits, target)   
 
 
         if args.mixed_precision:
@@ -240,31 +248,40 @@ def train_one_epoch(loader, model, criterion, optimizer, scaler, device, args, e
         # loss = loss_func(logits.permute(0,2,1), target)
 
         # loss.backward()
-        # optimizer.step()       
-        
-        bool_label = target > 0
+        # optimizer.step()
+               
+        if args.task == 'MLM':
+            bool_label = target > 0
 
-        pred = logits[bool_label, :].argmax(1)
-        valid_labels = target[bool_label]   
-        
-        PREDS.append(pred)
-        TARGETS.append(valid_labels)
-        
+            pred = logits[bool_label, :].argmax(1)
+            valid_labels = target[bool_label]   
+            
+            PREDS.append(pred)
+            TARGETS.append(valid_labels)
+            
+            acc = (pred == valid_labels).type(torch.float).mean() * 100.
+
         loss_np = loss.detach().cpu().numpy()
-        acc = (pred == valid_labels).type(torch.float).mean() * 100.
         train_loss.append(loss_np)
-        bar.set_description('train_loss: %.5f, train_acc: %.2f' % (loss_np, acc))
-
-        wandb.log({'step_train_loss': loss_np,
-            'step_train_acc': acc,
-            'train_batch': epoch*len(loader) + i})
+        if args.task == 'MLM':
+            bar.set_description('train_loss: %.5f, train_acc: %.2f' % (loss_np, acc))
         
+        else:
+            bar.set_description('train_loss: %.5f' % (loss_np))
 
-    PREDS = torch.cat(PREDS).cpu().numpy()
-    TARGETS = torch.cat(TARGETS).cpu().numpy()
+        '''wandb.log({'step_train_loss': loss_np,
+            'step_train_acc': acc,
+            'train_batch': epoch*len(loader) + i})'''
+        
+    if args.task == 'MLM':
+        PREDS = torch.cat(PREDS).cpu().numpy()
+        TARGETS = torch.cat(TARGETS).cpu().numpy()
 
 #     # Calculate total accuracy
-    total_acc = (PREDS == TARGETS).mean() * 100.
+        total_acc = (PREDS == TARGETS).mean() * 100.
+
+    else:
+        total_acc = None
 
     return np.mean(train_loss), total_acc
 
@@ -393,7 +410,7 @@ class ROCO(Dataset):
         self.mode = mode
 
         if args.task == 'distillation':
-            self.tokenizer = AutoTokenizer.from_pretrained(args.clinicalbert)
+            self.tokenizer = AutoTokenizer.from_pretrained(args.clinicalbert, model_max_length=args.max_token_length)
         else:
             self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
