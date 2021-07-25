@@ -6,6 +6,9 @@ import pickle
 ROCO_PATH = 'D:\ist\Tese\ROCO\\'
 #print(os.listdir(os.path.join(ROCO_PATH,"train")))
 
+
+''' build dataframes for roco'''
+
 def build_dataframe(split):
 
     licences = pd.read_csv(os.path.join(ROCO_PATH,split,"licences.txt"))
@@ -17,7 +20,7 @@ def build_dataframe(split):
 
     result = pd.merge(licences, captions, on="ROCO_ID")
     #print(result.iloc[0])
-    columns = ['PMC_ID','caption']
+    columns = ['name','caption']
     df = result[columns]
     filename = 'traindata.csv' if split == 'train' else 'valdata.csv'
     print(filename)
@@ -29,6 +32,8 @@ if DATA_DF:
     train_df = build_dataframe('train')
     val_df = build_dataframe('validation')
 # import IPython; IPython.embed(); exit(1)
+
+''' retrieve vocabulary from the captions'''
 
 
 def count_keywords(split, keywords):

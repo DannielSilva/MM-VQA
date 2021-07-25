@@ -349,7 +349,6 @@ def validate(loader, model, criterion, scaler, device, args, epoch, rec=True):
             #   wandb.log({'step_val_loss': loss_np,
             #       'step_val_acc': acc,
             #       'val_batch': epoch*len(loader) + i})
-            
 
         val_loss = np.mean(val_loss)
 

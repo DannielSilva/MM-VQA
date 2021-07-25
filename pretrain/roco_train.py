@@ -49,15 +49,19 @@ if __name__ == '__main__':
     parser.add_argument('--hidden_size', type=int, default=768, help='embedding size')
     parser.add_argument('--hidden_dropout_prob', type=float, default=0.3, help='dropout')
 
+    parser.add_argument('--val_loss_resume', type=float, default=np.inf, help='val loss threshold to resume execution')
+
 
     args = parser.parse_args()
 
-    #wandb.init(project='medvqa', name = args.run_name, config = args)
+    wandb.init(project='medvqa', name = args.run_name, config = args)
 
 
     train_data, val_data  = load_mlm_data(args)
     # No Image: PMC4240561_MA-68-291-g002.jpg
     train_data = train_data[train_data['name']!='PMC4345544_yjbm_88_1_93_g04.jpg'].reset_index(drop=True)
+    train_data = train_data[train_data['name']!='PMC4240561_MA-68-291-g002.jpg'].reset_index(drop=True) #no image
+    train_data = train_data[train_data['name']!='PMC4093298_jadp-03-059-g02.jpg'].reset_index(drop=True) #no caption
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -65,7 +69,7 @@ if __name__ == '__main__':
 
     model.to(device)
 
-    #wandb.watch(model, log='all')
+    wandb.watch(model, log='all')
 
     optimizer = optim.Adam(model.parameters(),lr=args.lr)
     scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, patience = args.patience, factor = args.factor, verbose = True)
@@ -116,9 +120,14 @@ if __name__ == '__main__':
         scaler.load_state_dict(ckpt['scaler'])
 
     if args.resume:
-        best_loss = scheduler.best
+        if args.val_loss_resume == np.inf:
+            print('using val loss registered in scheduler')
+            best_loss = scheduler.best
+        else:
+            print('using val loss given as argument')
+            best_loss = args.val_loss_resume
         print(best_loss)
-        model.load_state_dict( torch.load(os.path.join(args.save_dir, 'val_loss_3.pt')))
+        model.load_state_dict( torch.load(os.path.join(args.save_dir, args.task , args.run_name + '.pt')))
     else:
         best_loss = np.inf
 
@@ -146,7 +155,7 @@ if __name__ == '__main__':
             torch.save(recorder, os.path.join(args.save_dir, 'recorder_2.pt'))
             
 
-        '''if args.task == 'MLM':
+        if args.task == 'MLM':
             wandb.log({'epoch_train_loss': train_loss,
                     'epoch_val_loss': val_loss,
                     'epoch_train_acc': train_acc,
@@ -157,12 +166,17 @@ if __name__ == '__main__':
             wandb.log({'epoch_train_loss': train_loss,
                     'epoch_val_loss': val_loss,
                     'learning_rate': optimizer.param_groups[0]["lr"],
-                    'epoch': epoch})'''
+                    'epoch': epoch})
 
-        content = f'Learning rate: {(optimizer.param_groups[0]["lr"]):.7f}, Train loss: {(train_loss):.4f}, Train acc: {(train_acc):.4f} ,Val loss: {(val_loss):.4f}, Val acc: {(acc):.4f}'
+        if args.task == 'MLM':
+            content = f'Learning rate: {(optimizer.param_groups[0]["lr"]):.7f}, Train loss: {(train_loss):.4f}, Train acc: {(train_acc):.4f} ,Val loss: {(val_loss):.4f}, Val acc: {(acc):.4f}'
+        else:
+            content = f'Learning rate: {(optimizer.param_groups[0]["lr"]):.7f}, Train loss: {(train_loss):.4f}, Val loss: {(val_loss):.4f}'
+
         print(content)
         
         if val_loss<best_loss:
-            torch.save(model.state_dict(), os.path.join(args.save_dir, 'val_loss_3.pt'))
+            print('Saving model')
+            torch.save(model.state_dict(), os.path.join(args.save_dir, args.task , args.run_name + '.pt'))
             best_loss=val_loss
 
