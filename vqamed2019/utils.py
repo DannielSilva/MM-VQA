@@ -21,7 +21,7 @@ from random import choice
 import matplotlib.pyplot as plt
 
 #import pretrainedmodels
-
+from transformers import AutoTokenizer, AutoModel
 
 def seed_everything(seed):
     random.seed(seed)
@@ -218,7 +218,10 @@ class VQAMed(Dataset):
         self.tfm = tfm
         self.size = imgsize
         self.args = args
-        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        if args.task == 'MLM':
+            self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        elif args.task == 'distillation':
+            self.tokenizer = AutoTokenizer.from_pretrained(args.clinicalbert)
         self.mode = mode
 
         if self.mode == 'train':
@@ -537,7 +540,13 @@ class BertLayer(nn.Module):
 class Transformer(nn.Module):
     def __init__(self, args):
         super(Transformer,self).__init__()
-        base_model = BertModel.from_pretrained('bert-base-uncased')
+
+        if args.task == 'distillation':
+            bert_name = args.clinicalbert
+        elif args.task == 'MLM':
+            bert_name = 'bert-base-uncased'
+
+        base_model = AutoModel.from_pretrained(bert_name)
         bert_model = nn.Sequential(*list(base_model.children())[0:])
         self.bert_embedding = bert_model[0]
         # self.embed = Embeddings(args)
@@ -635,8 +644,10 @@ def train_one_epoch(loader, model, optimizer, criterion, device, scaler, args, i
                 loss = loss_func(logits, target)
         else:
             logits, _, _ = model(img, question_token, segment_ids, attention_mask)
-            loss = loss_func(logits, target, category)
-
+            if args.smoothing:
+                loss = loss_func(logits, target, category)
+            else:
+                loss = loss_func(logits, target)
         if args.mixed_precision:
             scaler.scale(loss)
             loss.backward()
@@ -700,7 +711,10 @@ def validate(loader, model, criterion, device, scaler, args, val_df, idx2ans):
                     loss = criterion(logits, target)
             else:
                 logits, _ , _= model(img, question_token, segment_ids, attention_mask)
-                loss = criterion(logits, target,0)
+                if args.smoothing:
+                    loss = criterion(logits, target,0)
+                else:
+                    loss = criterion(logits, target)
 
 
             loss_np = loss.detach().cpu().numpy()
@@ -736,7 +750,7 @@ def validate(loader, model, criterion, device, scaler, args, val_df, idx2ans):
         abnorm_acc = (PREDS[val_df['category']=='abnormality'] == TARGETS[val_df['category']=='abnormality']).mean() * 100.
 
         acc = {'val_total_acc': np.round(total_acc, 4), 'val_binary_acc': np.round(binary_acc, 4), 'val_plane_acc': np.round(plane_acc, 4), 'val_organ_acc': np.round(organ_acc, 4),
-               'val_modality_acc': np.round(modality_acc, 4), 'val_abnorm_acc': np.round(abnorm_acc, 4)}
+            'val_modality_acc': np.round(modality_acc, 4), 'val_abnorm_acc': np.round(abnorm_acc, 4)}
 
         # add bleu score code
         total_bleu = calculate_bleu_score(PREDS,TARGETS,idx2ans)
@@ -749,7 +763,7 @@ def validate(loader, model, criterion, device, scaler, args, val_df, idx2ans):
 
         bleu = {'val_total_bleu': np.round(total_bleu, 4), 'val_binary_bleu': np.round(binary_bleu, 4), 'val_plane_bleu': np.round(plane_bleu, 4), 'val_organ_bleu': np.round(organ_bleu, 4),
             'val_modality_bleu': np.round(modality_bleu, 4), 'val_abnorm_bleu': np.round(abnorm_bleu, 4)}
-
+       
     return val_loss, PREDS, acc, bleu
 
 def test(loader, model, criterion, device, scaler, args, val_df,idx2ans):
@@ -775,7 +789,10 @@ def test(loader, model, criterion, device, scaler, args, val_df,idx2ans):
                     loss = criterion(logits, target)
             else:
                 logits, _, _ = model(img, question_token, segment_ids, attention_mask)
-                loss = criterion(logits, target,0)
+                if args.smoothing:
+                    loss = criterion(logits, target,0)
+                else:
+                    loss = criterion(logits, target)
 
 
             loss_np = loss.detach().cpu().numpy()

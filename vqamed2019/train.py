@@ -64,6 +64,10 @@ if __name__ == '__main__':
     parser.add_argument('--wandb', action = 'store_false', default = True, help = "record in wandb or not")
     parser.add_argument('--save_model_epoch', type = int, required = False, default = 4, help = "periodically save the model")
 
+    parser.add_argument('--task', type=str, default='MLM',
+                        choices=['MLM', 'distillation'], help='task which the model was pre-trained on')
+    parser.add_argument('--clinicalbert', type=str, default='emilyalsentzer/Bio_ClinicalBERT')
+
     args = parser.parse_args()
     print(args.wandb)
     if args.wandb:
@@ -113,7 +117,7 @@ if __name__ == '__main__':
         print(args.model_dir)
         model.load_state_dict(torch.load(args.model_dir))
         model.classifier[2] = nn.Linear(args.hidden_size, num_classes)
-##
+## TODO: have to change this resume training if statement
     if args.resume_training:
         print('resume training')
         model.classifier[2] = nn.Linear(args.hidden_size, num_classes)
@@ -216,12 +220,12 @@ if __name__ == '__main__':
             for k,v in bleu.items():
                 log_dict[k] = v
 
-            log_dict['train_loss'] = train_loss
-            log_dict['test_loss'] = test_loss
-            log_dict['learning_rate'] = optimizer.param_groups[0]["lr"]
-            log_dict['val_total_acc'] = val_acc['val_total_acc']
-
             if args.wandb:
+                log_dict['train_loss'] = train_loss
+                log_dict['test_loss'] = test_loss
+                log_dict['learning_rate'] = optimizer.param_groups[0]["lr"]
+                log_dict['val_total_acc'] = val_acc['val_total_acc']
+
                 wandb.log(log_dict)
 
         else:
@@ -242,14 +246,14 @@ if __name__ == '__main__':
 
             if val_acc['val_total_acc'] > best_acc1:
                 print('Saving model')
-                torch.save(model.state_dict(),os.path.join(args.save_dir, f'{args.run_name}_acc.pt'))
+                torch.save(model.state_dict(), os.path.join(args.save_dir, args.task , args.run_name + '.pt'))
                 best_acc1=val_acc['val_total_acc']
 
         else:
 
             if val_acc['val_' + args.category + '_acc'] > best_acc1:
                 print('Saving model')
-                torch.save(model.state_dict(),os.path.join(args.save_dir, f'{args.run_name}_acc.pt'))
+                torch.save(model.state_dict(), os.path.join(args.save_dir, args.task , args.run_name + '.pt'))
                 best_acc1 = val_acc['val_' + args.category + '_acc'] 
 
         # if (epoch + 1) % args.save_model_epoch == 0:
