@@ -1,6 +1,6 @@
 #import cv2
 import argparse
-from utils import seed_everything, Model, VQAMed, train_one_epoch, validate, test, load_data, LabelSmoothing, train_img_only, val_img_only, test_img_only, LabelSmoothByCategory
+from utils import seed_everything, VQAMed, train_one_epoch, validate, test, load_data, LabelSmoothing, train_img_only, val_img_only, test_img_only, LabelSmoothByCategory #,Model
 import wandb
 import pandas as pd
 import numpy as np
@@ -17,6 +17,8 @@ import warnings
 #import pretrainedmodels
 #from albumentations.core.composition import OneOf
 #from albumentations.pytorch.transforms import ToTensorV2
+
+from models.mmbert import Model
 
 warnings.simplefilter("ignore", UserWarning)
 
@@ -67,6 +69,8 @@ if __name__ == '__main__':
     parser.add_argument('--task', type=str, default='MLM',
                         choices=['MLM', 'distillation'], help='task which the model was pre-trained on')
     parser.add_argument('--clinicalbert', type=str, default='emilyalsentzer/Bio_ClinicalBERT')
+    parser.add_argument('--dataset', type=str, default='VQA-Med', help='roco or vqamed2019')
+    parser.add_argument('--cnn_encoder', type=str, default='resnet152', help='name of the cnn encoder')
 
     args = parser.parse_args()
     print(args.wandb)

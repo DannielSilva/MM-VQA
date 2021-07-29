@@ -12,7 +12,9 @@ from torchvision import transforms
 from torch import optim
 from torch.optim import lr_scheduler
 
-from roco_utils import load_mlm_data, train_one_epoch, validate, get_keywords, Model, ROCO
+from roco_utils import load_mlm_data, train_one_epoch, validate, get_keywords, ROCO#, Model
+
+from models.mmbert import Model
 
 if __name__ == '__main__':
     __spec__ = None
@@ -50,11 +52,14 @@ if __name__ == '__main__':
     parser.add_argument('--hidden_dropout_prob', type=float, default=0.3, help='dropout')
 
     parser.add_argument('--val_loss_resume', type=float, default=np.inf, help='val loss threshold to resume execution')
+    parser.add_argument('--dataset', type=str, default='roco', help='roco or vqamed2019')
+    parser.add_argument('--cnn_encoder', type=str, default='resnet152', help='name of the cnn encoder')
 
 
     args = parser.parse_args()
-
-    wandb.init(project='medvqa', name = args.run_name, config = args)
+    
+    assert args.dataset in args.data_dir
+    #wandb.init(project='medvqa', name = args.run_name, config = args)
 
 
     train_data, val_data  = load_mlm_data(args)
@@ -69,7 +74,7 @@ if __name__ == '__main__':
 
     model.to(device)
 
-    wandb.watch(model, log='all')
+    #wandb.watch(model, log='all')
 
     optimizer = optim.Adam(model.parameters(),lr=args.lr)
     scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, patience = args.patience, factor = args.factor, verbose = True)
