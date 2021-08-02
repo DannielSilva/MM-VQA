@@ -24,11 +24,17 @@ def get_image_encoder(name):
     if 'resnet' in name:
         return m(pretrained=True), channel_size
     elif 'efficientnetv2' in name:
-        return m(name, pretrained=True)
+        return m(name, pretrained=True), channel_size
 
 def get_transfer(args):
     if 'resnet' in args.cnn_encoder:
+        print('Using resnet', args.cnn_encoder)
         return ResNetTransfer(args)
+    elif 'efficientnetv2' in args.cnn_encoder:
+        print('Using efficientnetv2', args.cnn_encoder)
+        return EffNetV2Transfer(args)
+    else:
+        raise NotImplementedError
 
 class Transfer(nn.Module):
     def __init__(self,args):
@@ -71,6 +77,45 @@ class ResNetTransfer(Transfer):
         modules7 = list(self.model.children())[:-7]
         fix7 = nn.Sequential(*modules7)
         v_7 = self.gap7(self.relu(self.conv7(fix7(img)))).view(-1,self.args.hidden_size)
+        return v_2, v_3, v_4, v_5, v_7
+
+class EffNetV2Transfer(Transfer):
+    def __init__(self, args):
+        super().__init__(args)
+    
+    def forward(self, img):
+        #5 viz
+
+        #1st block
+        first = list(self.model.children())[:3]
+        first_nn = nn.Sequential(*first)
+        v_7 = self.gap7(self.relu(self.conv7(first_nn(img)))).view(-1,self.args.hidden_size)
+
+        #blocks is a Sequential that contains the individual blocks
+        blocks = list(self.model.children())[3]
+
+        #2nd block (1st sub block in blocks)
+        first_b = list(blocks[:2])
+        second = first + first_b
+        second_nn  = nn.Sequential(*second)
+        v_5 = self.gap5(self.relu(self.conv5(second_nn(img)))).view(-1,self.args.hidden_size)
+
+        #3rd block (2nd sub block in blocks)
+        second_b = list(blocks[:4])
+        third = first + second_b
+        third_nn = nn.Sequential(*third)
+        v_4 = self.gap4(self.relu(self.conv4(third_nn(img)))).view(-1,self.args.hidden_size)
+
+        #4th block
+        forth = list(self.model.children())[:-5]
+        forth_b_nn = nn.Sequential(*forth)
+        v_3 = self.gap3(self.relu(self.conv3(forth_b_nn(img)))).view(-1,self.args.hidden_size)
+
+        #5th block
+        fifth = list(self.model.children())[:-2]
+        fifth_b_nn = nn.Sequential(*fifth )
+        v_2 = self.gap2(self.relu(self.conv2(fifth_b_nn(img)))).view(-1,self.args.hidden_size)
+
         return v_2, v_3, v_4, v_5, v_7
 
 class MultiHeadedSelfAttention(nn.Module):
@@ -163,13 +208,17 @@ class BertLayer(nn.Module):
             out = self.norm2(out + self.drop2(h))
         return out
 
+def get_bert_model(args):
+    if args.task == 'distillation':
+            bert_name = args.clinicalbert
+    else:
+        bert_name = 'bert-base-uncased'
+    return bert_name
+
 class Transformer(nn.Module):
     def __init__(self, args):
         super(Transformer,self).__init__()
-        if args.task == 'distillation':
-            bert_name = args.clinicalbert
-        else:
-            bert_name = 'bert-base-uncased'
+        bert_name = get_bert_model(args)
 
         base_model = AutoModel.from_pretrained(bert_name)
         bert_model = nn.Sequential(*list(base_model.children())[0:])
@@ -181,7 +230,9 @@ class Transformer(nn.Module):
     def forward(self, img, input_ids, token_type_ids, mask):
         v_2, v_3, v_4, v_5, v_7 = self.trans(img)
 #         h = self.embed(input_ids, token_type_ids)
+        #print('shape input_ids',input_ids.shape)
         h = self.bert_embedding(input_ids=input_ids, token_type_ids=token_type_ids, position_ids=None)
+        #print('h', h.shape)
         for i in range(len(h)):
             h[i][1] = v_2[i]
         for i in range(len(h)):
@@ -199,7 +250,7 @@ class Transformer(nn.Module):
 class Model(nn.Module):
     def __init__(self,args):
         super(Model,self).__init__()
-        self.transformer = Transformer(args)
+        self.transformer = get_transformer_model(args)
         self.fc1 = nn.Linear(args.hidden_size, args.hidden_size)
         self.activ1 = nn.Tanh()
         self.classifier = nn.Sequential(nn.Linear(args.hidden_size, args.hidden_size),
@@ -212,7 +263,6 @@ class Model(nn.Module):
         if self.dataset == 'roco':
             h = self.transformer(img, input_ids, segment_ids, input_mask)
             if self.task == 'MLM':
-                print('MLM')
                 pooled_h = self.activ1(self.fc1(h))
                 logits = self.classifier(pooled_h)
             elif self.task == 'distillation':
@@ -224,3 +274,86 @@ class Model(nn.Module):
             pooled_h = self.activ1(self.fc1(h.mean(1)))
             logits = self.classifier(pooled_h)
             return logits, 0,0
+
+
+
+class ResEncoderBlock(nn.Module):
+    def __init__(self, emb_s = 32, head_cnt = 8, dp1 = 0.1, dp2 = 0.1):
+        super().__init__()
+        emb = emb_s * head_cnt
+        self.kqv = nn.Linear(emb_s, 3*emb_s, bias = False)
+        self.dp = nn.Dropout(dp1)     
+        self.proj = nn.Linear(emb, emb,bias = False)
+        self.head_cnt = head_cnt
+        self.emb_s = emb_s
+        self.ln1 = nn.LayerNorm(emb)
+        self.ln2 = nn.LayerNorm(emb)
+        
+        self.ff = nn.Sequential(
+            nn.Linear(emb, 4 * emb),
+            nn.GELU(),
+            nn.Linear(4 * emb, emb),
+            nn.Dropout(dp2),
+        )
+
+    def resmha(self, x, prev = None):
+        B, T, _ = x.shape
+        x = x.reshape(B, T, self.head_cnt, self.emb_s)
+        k, q, v = torch.split(self.kqv(x), self.emb_s, dim = -1) # B, T, h, emb_s
+        if prev is not None : 
+            att_score = torch.einsum('bihk,bjhk->bijh', q, k)/self.emb_s**0.5 + prev
+        else:
+            att_score = torch.einsum('bihk,bjhk->bijh', q, k)/self.emb_s**0.5
+
+        prev = att_score
+        att = F.softmax(prev, dim = 2) #B, T, T, h sum on dim 1 = 1
+        res = torch.einsum('btih,bihs->bths', att, v).reshape(B, T, -1) #B, T, h * emb_s
+        return self.dp(self.proj(res)), prev
+    
+    def forward(self, x, prev = None): ## add & norm later.
+        rmha, prev =  self.resmha(x, prev = prev)
+        x = self.ln1(x + rmha)
+        x = self.ln2(x + self.ff(x))
+
+        return x, prev
+
+def get_transformer_model(args):
+    if 'transformer' in args.transformer_model:
+        print('Using regular transformer')
+        return Transformer(args)
+    elif 'realformer' in args.transformer_model:
+        print('Using RealFormer')
+        return RealFormer(args)
+    else:
+        raise NotImplementedError
+
+class RealFormer(nn.Module):
+    def __init__(self,args):
+        super().__init__()
+        bert_name = get_bert_model(args)
+
+        base_model = AutoModel.from_pretrained(bert_name)
+        bert_model = nn.Sequential(*list(base_model.children())[0:])
+        self.bert_embedding = bert_model[0]
+#         self.embed = Embeddings(args)
+        self.trans = get_transfer(args)
+        head_cnt = 8
+        self.mains = nn.Sequential(*[ResEncoderBlock(emb_s = args.hidden_size // head_cnt, head_cnt = head_cnt, dp1 = 0.1, dp2 = 0.1) for _ in range(args.n_layers)])
+    def forward(self, img, input_ids, token_type_ids, mask):
+        v_2, v_3, v_4, v_5, v_7 = self.trans(img)
+        h = self.bert_embedding(input_ids=input_ids, token_type_ids=token_type_ids, position_ids=None)
+        for i in range(len(h)):
+            h[i][1] = v_2[i]
+        for i in range(len(h)):
+            h[i][2] = v_3[i]
+        for i in range(len(h)):
+            h[i][3] = v_4[i]
+        for i in range(len(h)):
+            h[i][4] = v_5[i]
+        for i in range(len(h)):
+            h[i][5] = v_7[i]
+
+        prev = None
+        for resencoder in self.mains:
+            h, prev = resencoder(h, prev = prev)
+        return h
