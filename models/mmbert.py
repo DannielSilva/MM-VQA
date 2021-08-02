@@ -276,7 +276,7 @@ class Model(nn.Module):
             return logits, 0,0
 
 
-
+# implementation from https://github.com/cloneofsimo/RealFormer-pytorch/blob/main/models.py
 class ResEncoderBlock(nn.Module):
     def __init__(self, emb_s = 32, head_cnt = 8, dp1 = 0.1, dp2 = 0.1):
         super().__init__()
