@@ -207,7 +207,7 @@ def train_one_epoch(loader, model, criterion, optimizer, scaler, device, args, e
     train_loss = []
     PREDS = []
     TARGETS = []
-    bar = tqdm(loader)
+    bar = tqdm(loader, leave=False)
     for i, (img, caption_token,segment_ids,attention_mask,target) in enumerate(bar):
 
         img, caption_token,segment_ids,attention_mask,target = img.to(device), caption_token.to(device), segment_ids.to(device), attention_mask.to(device), target.to(device)
