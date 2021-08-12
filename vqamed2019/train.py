@@ -71,7 +71,7 @@ if __name__ == '__main__':
     parser.add_argument('--clinicalbert', type=str, default='emilyalsentzer/Bio_ClinicalBERT')
     parser.add_argument('--dataset', type=str, default='VQA-Med', help='roco or vqamed2019')
     parser.add_argument('--cnn_encoder', type=str, default='resnet152', help='name of the cnn encoder')
-    parser.add_argument('--transformer_model', type=str, default='transformer',choices=['transformer', 'realformer'], help='name of the transformer model')
+    parser.add_argument('--transformer_model', type=str, default='transformer',choices=['transformer', 'realformer', 'feedback-transformer'], help='name of the transformer model')
 
 
     args = parser.parse_args()

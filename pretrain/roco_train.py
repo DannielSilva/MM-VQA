@@ -54,7 +54,7 @@ if __name__ == '__main__':
     parser.add_argument('--val_loss_resume', type=float, default=np.inf, help='val loss threshold to resume execution')
     parser.add_argument('--dataset', type=str, default='roco', help='roco or vqamed2019')
     parser.add_argument('--cnn_encoder', type=str, default='resnet152', help='name of the cnn encoder')
-    parser.add_argument('--transformer_model', type=str, default='transformer',choices=['transformer', 'realformer'], help='name of the transformer model')
+    parser.add_argument('--transformer_model', type=str, default='transformer',choices=['transformer', 'realformer', 'feedback-transformer'], help='name of the transformer model')
 
 
     args = parser.parse_args()
@@ -133,7 +133,7 @@ if __name__ == '__main__':
             print('using val loss given as argument')
             best_loss = args.val_loss_resume
         print(best_loss)
-        model.load_state_dict( torch.load(os.path.join(args.save_dir, args.task , args.run_name + '.pt')))
+        #model.load_state_dict( torch.load(os.path.join(args.save_dir, args.task , args.run_name + '.pt')))
     else:
         best_loss = np.inf
 
