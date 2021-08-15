@@ -56,6 +56,7 @@ if __name__ == '__main__':
     parser.add_argument('--cnn_encoder', type=str, default='resnet152', help='name of the cnn encoder')
     parser.add_argument('--transformer_model', type=str, default='transformer',choices=['transformer', 'realformer', 'feedback-transformer'], help='name of the transformer model')
 
+    parser.add_argument('--num_vis', type = int, default=5, help = "num of visual embeddings")
 
     args = parser.parse_args()
     
@@ -81,7 +82,7 @@ if __name__ == '__main__':
     scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, patience = args.patience, factor = args.factor, verbose = True)
     if args.task == 'MLM':
         criterion = nn.NLLLoss()
-    else:
+    elif args.task == 'distillation':
         criterion = nn.MSELoss()
 
 
@@ -168,7 +169,7 @@ if __name__ == '__main__':
                     'epoch_val_acc': acc,
                     'learning_rate': optimizer.param_groups[0]["lr"],
                     'epoch': epoch})
-        else:
+        elif args.task == 'distillation':
             wandb.log({'epoch_train_loss': train_loss,
                     'epoch_val_loss': val_loss,
                     'learning_rate': optimizer.param_groups[0]["lr"],
@@ -176,7 +177,7 @@ if __name__ == '__main__':
 
         if args.task == 'MLM':
             content = f'Learning rate: {(optimizer.param_groups[0]["lr"]):.7f}, Train loss: {(train_loss):.4f}, Train acc: {(train_acc):.4f} ,Val loss: {(val_loss):.4f}, Val acc: {(acc):.4f}'
-        else:
+        elif args.task == 'distillation':
             content = f'Learning rate: {(optimizer.param_groups[0]["lr"]):.7f}, Train loss: {(train_loss):.4f}, Val loss: {(val_loss):.4f}'
 
         print(content)

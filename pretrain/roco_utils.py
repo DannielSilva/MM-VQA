@@ -159,23 +159,25 @@ def mask_word(sentence, tokenizer, keywords, args):
     return  new_tokens, output_label
 
 def encode_text(caption,tokenizer, keywords, args, clinicalbert):
-    part1 = [0 for _ in range(5)]
+    TOTAL_SPECIAL_TOKENS = args.num_vis + 3 #at least the visual tokens and [CLS] and two [SEP] will be used
+    part1 = [0 for _ in range(args.num_vis)]
+    
     #get token ids and remove [CLS] and [SEP] token id
     if args.task == 'MLM':
         caption, labels = mask_word(caption, tokenizer, keywords, args)
-    else:
+    elif args.task == 'distillation':
         #part1 = [torch.zeros(768, dtype=torch.float) for _ in range(5)]
         caption, labels = distillation(caption, tokenizer, clinicalbert, args)
 
     
     part2 = tokenizer.convert_tokens_to_ids(caption)
-    part2 = part2[:args.max_position_embeddings-8]
-    labels = labels[:args.max_position_embeddings-8]
+    part2 = part2[:args.max_position_embeddings-TOTAL_SPECIAL_TOKENS]
+    labels = labels[:args.max_position_embeddings-TOTAL_SPECIAL_TOKENS]
     
     tokens = [tokenizer.cls_token_id] + part1 + [tokenizer.sep_token_id] + part2 + [tokenizer.sep_token_id]
     #labels = [0]*(2+len(part1)) + labels + [0]
     
-    segment_ids = [0]*(len(part1)+2) + [1]*(len(part2[:args.max_position_embeddings-8])+1)
+    segment_ids = [0]*(len(part1)+2) + [1]*(len(part2[:args.max_position_embeddings-TOTAL_SPECIAL_TOKENS])+1)
     input_mask = [1]*len(tokens)
     n_pad = args.max_position_embeddings - len(tokens)
     tokens.extend([0]*n_pad)
@@ -185,7 +187,7 @@ def encode_text(caption,tokenizer, keywords, args, clinicalbert):
         labels = [0]*(2+len(part1)) + labels + [0]
         labels.extend([0]*(n_pad))
         labels = torch.tensor(labels)
-    else:
+    elif args.task == 'distillation':
         # labels = [torch.zeros(768, dtype=torch.float)]*(2+len(part1)) + labels + [torch.zeros(768, dtype=torch.float)]
         # labels.extend([torch.zeros(768, dtype=torch.float)]*(n_pad))
         # labels = torch.stack(labels,dim=0)
@@ -224,14 +226,14 @@ def train_one_epoch(loader, model, criterion, optimizer, scaler, device, args, e
                 if args.task == 'MLM':
                     logits = logits.log_softmax(-1)  # (bs x seq_len x vocab_size)
                     loss = loss_func(logits.permute(0,2,1), target)
-                else:
+                elif args.task == 'distillation':
                     loss = loss_func(logits, target)
         else:
             logits = model(img, caption_token, segment_ids, attention_mask)
             if args.task == 'MLM':
                     logits = logits.log_softmax(-1)  # (bs x seq_len x vocab_size)
                     loss = loss_func(logits.permute(0,2,1), target)
-            else:
+            elif args.task == 'distillation':
                 loss = loss_func(logits, target)   
 
 
@@ -249,7 +251,7 @@ def train_one_epoch(loader, model, criterion, optimizer, scaler, device, args, e
 
         # loss.backward()
         # optimizer.step()
-               
+           
         if args.task == 'MLM':
             bool_label = target > 0
 
@@ -266,7 +268,7 @@ def train_one_epoch(loader, model, criterion, optimizer, scaler, device, args, e
         if args.task == 'MLM':
             bar.set_description('train_loss: %.5f, train_acc: %.2f' % (loss_np, acc))
         
-        else:
+        elif args.task == 'distillation':
             bar.set_description('train_loss: %.5f' % (loss_np))
 
         '''wandb.log({'step_train_loss': loss_np,
@@ -280,7 +282,7 @@ def train_one_epoch(loader, model, criterion, optimizer, scaler, device, args, e
 #     # Calculate total accuracy
         total_acc = (PREDS == TARGETS).mean() * 100.
 
-    else:
+    elif args.task == 'distillation':
         total_acc = None
 
     return np.mean(train_loss), total_acc
@@ -309,14 +311,14 @@ def validate(loader, model, criterion, scaler, device, args, epoch, rec=True):
                     if args.task == 'MLM':
                         logits = logits.log_softmax(-1)  # (bs x seq_len x vocab_size)
                         loss = loss_func(logits.permute(0,2,1), target)
-                    else:
+                    elif args.task == 'distillation':
                         loss = loss_func(logits, target)
             else:
                 logits = model(img, caption_token, segment_ids, attention_mask)
                 if args.task == 'MLM':
                     logits = logits.log_softmax(-1)  # (bs x seq_len x vocab_size)
                     loss = loss_func(logits.permute(0,2,1), target)
-                else:
+                elif args.task == 'distillation':
                     loss = loss_func(logits, target)
                     #import IPython; IPython.embed(); exit(0)       
 
@@ -341,7 +343,7 @@ def validate(loader, model, criterion, scaler, device, args, epoch, rec=True):
 
             if args.task == 'MLM':
                 bar.set_description('val_loss: %.5f, val_acc: %.5f' % (loss_np, acc))
-            else:
+            elif args.task == 'distillation':
                 bar.set_description('val_loss: %.5f' % (loss_np))
 
 
@@ -359,7 +361,7 @@ def validate(loader, model, criterion, scaler, device, args, epoch, rec=True):
         # Calculate total accuracy
         total_acc = (PREDS == TARGETS).mean() * 100.
 
-    else:
+    elif args.task == 'distillation':
         total_acc = None
 
     if not rec:
@@ -751,7 +753,7 @@ class Model(nn.Module):
         if self.task == 'MLM':
             pooled_h = self.activ1(self.fc1(h))
             logits = self.classifier(pooled_h)
-        else:
+        elif self.task == 'distillation':
             logits = h
         return logits
 

@@ -57,20 +57,27 @@ class TransformerAbstract(nn.Module):
     # encode images with cnn and embedd the text tokens and prepare
     # to feed to the transformer
     def prepare_input(self, img, input_ids, token_type_ids, mask):
-        v_2, v_3, v_4, v_5, v_7 = self.trans(img)
+        # turn into a list to iterate an arbitrary number of tokens
+        vizs = list(self.trans(img)) 
         h = self.bert_embedding(input_ids=input_ids, token_type_ids=token_type_ids, position_ids=None)
-        for i in range(len(h)):
-            h[i][1] = v_2[i]
-        for i in range(len(h)):
-            h[i][2] = v_3[i]
-        for i in range(len(h)):
-            h[i][3] = v_4[i]
-        for i in range(len(h)):
-            h[i][4] = v_5[i]
-        for i in range(len(h)):
-            h[i][5] = v_7[i]
-
+        for n, v in enumerate(vizs):
+            for i in range(len(h)):
+                h[i][n] = v[i]
         return h
+
+
+        # v_2, v_3, v_4, v_5, v_7 = self.trans(img)
+        # for i in range(len(h)):
+        #     h[i][1] = v_2[i]
+        # for i in range(len(h)):
+        #     h[i][2] = v_3[i]
+        # for i in range(len(h)):
+        #     h[i][3] = v_4[i]
+        # for i in range(len(h)):
+        #     h[i][4] = v_5[i]
+        # for i in range(len(h)):
+        #     h[i][5] = v_7[i]
+        
 
 class Transformer(TransformerAbstract):
     def __init__(self, args):
