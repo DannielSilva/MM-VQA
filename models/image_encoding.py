@@ -124,8 +124,8 @@ class EffNetV2Transfer7Tokens(nn.Module):
         self.model, self.channel_size = get_image_encoder(args)
         self.relu = nn.ReLU()
 
-        self.conv = []
-        self.gap = []
+        self.conv = nn.ModuleList([])
+        self.gap = nn.ModuleList([])
         for i, channel_size in enumerate(self.channel_size):
             self.conv.append(nn.Conv2d(channel_size, args.hidden_size, kernel_size=(1, 1), stride=(1, 1), bias=False))
             self.gap.append(nn.AdaptiveAvgPool2d((1,1)))
