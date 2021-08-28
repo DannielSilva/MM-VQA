@@ -213,7 +213,7 @@ def train_one_epoch(loader, model, criterion, optimizer, scaler, device, args, e
     for i, (img, caption_token,segment_ids,attention_mask,target) in enumerate(bar):
 
         img, caption_token,segment_ids,attention_mask,target = img.to(device), caption_token.to(device), segment_ids.to(device), attention_mask.to(device), target.to(device)
-
+        
         caption_token = caption_token.squeeze(1)
         attention_mask = attention_mask.squeeze(1)
     
@@ -412,13 +412,11 @@ class ROCO(Dataset):
 
         if args.task == 'distillation':
             self.tokenizer = AutoTokenizer.from_pretrained(args.clinicalbert, model_max_length=args.max_token_length)
-        else:
+        elif args.task == 'MLM':
             self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
         self.clinicalbert = None
 
-        # if args.task == 'MLM':
-        #     self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         if args.task == 'distillation':
             self.clinicalbert = AutoModel.from_pretrained(args.clinicalbert)
         
