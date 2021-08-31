@@ -12,7 +12,7 @@ from torchvision import transforms
 from torch import optim
 from torch.optim import lr_scheduler
 
-from roco_utils import load_mlm_data, train_one_epoch, validate, get_keywords, ROCO#, Model
+from roco_utils import load_mlm_data, train_one_epoch, validate, get_keywords, ROCO, train_one_epoch_test_parameters,validate_test_parameters#, Model
 
 from models.mmbert import Model, get_transformer_model
 
@@ -77,6 +77,14 @@ if __name__ == '__main__':
     model.to(device)
 
     wandb.watch(model, log='all')
+
+
+    # for parameter in model.parameters():
+    #     parameter.requires_grad = False
+
+    # for parameter in model.transformer.trans.model.parameters():
+    #     parameter.requires_grad = True
+    # print('encoder with grad=truee')
 
     optimizer = optim.Adam(model.parameters(),lr=args.lr)
     scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, patience = args.patience, factor = args.factor, verbose = True)

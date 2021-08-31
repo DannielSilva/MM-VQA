@@ -265,6 +265,7 @@ def train_one_epoch(loader, model, criterion, optimizer, scaler, device, args, e
 
         loss_np = loss.detach().cpu().numpy()
         train_loss.append(loss_np)
+        #print('train_loss: %.5f' % (loss_np))
         if args.task == 'MLM':
             bar.set_description('train_loss: %.5f, train_acc: %.2f' % (loss_np, acc))
         
@@ -400,6 +401,145 @@ def test(loader):
     return PREDS, total_acc
 
 
+
+'''section of code to test if the weights of the encoder model are being updated
+despite the encoder in the forward method building nn.Sequential from the layers of the model'''
+
+'''two ways, first by testing if the model stores a grad after processing, which means the weights will change'''
+input_test_train={}
+input_test_val = {}
+def get_same_batch(loader, mode):
+    if mode == 'train':
+        dict_batch = input_test_train
+    elif mode =='eval':
+        dict_batch = input_test_val
+    
+    if not dict_batch:
+        for i, (img, caption_token,segment_ids,attention_mask,target) in enumerate(loader):
+            break
+        dict_batch['i'] = i
+        dict_batch['img'] = img
+        dict_batch['caption_token'] = caption_token
+        dict_batch['segment_ids'] = segment_ids
+        dict_batch['attention_mask'] = attention_mask
+        dict_batch['target'] = target
+    return dict_batch['i'], dict_batch['img'], dict_batch['caption_token'], dict_batch['segment_ids'], dict_batch['attention_mask'],dict_batch['target']
+
+counter_grads = {}
+def initialize_counter_grads(model):
+    for name, param in model.named_parameters():
+        if 'fc' in name:
+            continue
+        if 'weight' in name:
+            counter_grads[name] = torch.zeros(param.grad.shape)
+
+def update_countner_grads(model):
+    for name, param in model.named_parameters():
+        if 'fc' in name:
+            continue
+        if 'weight' in name:
+            temp = torch.zeros(param.grad.shape)
+            temp[param.grad != 0] += 1
+            counter_grads[name] += temp
+
+'''check directly if the weights are different from the first and last epochs '''
+weights_params = []
+def initialize_params(model):
+    a = list(model.parameters())[0].clone().detach()
+    weights_params.append(a)
+
+    b = list(model.parameters())[201].clone().detach()
+    weights_params.append(b)
+
+    c = list(model.parameters())[450].clone().detach()
+    weights_params.append(c)
+    
+def compare_params(model):
+    a = list(model.parameters())[0].clone().detach()
+
+    b = list(model.parameters())[201].clone().detach()
+
+    c = list(model.parameters())[450].clone().detach()
+
+    print('comparing params 0', torch.equal(a, weights_params[0]))
+    print('comparing params 201', torch.equal(b, weights_params[1]))
+    print('comparing params 450', torch.equal(c, weights_params[2]))
+
+def train_one_epoch_test_parameters(loader, model, criterion, optimizer, scaler, device, args, epoch):
+    model.train()
+    train_loss = []
+    
+    i,img, caption_token,segment_ids,attention_mask,target = get_same_batch(loader,'train')
+    img, caption_token,segment_ids,attention_mask,target = img.to(device), caption_token.to(device), segment_ids.to(device), attention_mask.to(device), target.to(device)
+    
+    caption_token = caption_token.squeeze(1)
+    attention_mask = attention_mask.squeeze(1)
+
+    loss_func = criterion
+    optimizer.zero_grad()
+
+
+    logits = model(img, caption_token, segment_ids, attention_mask)
+    logits = logits.log_softmax(-1)  # (bs x seq_len x vocab_size)
+    loss = loss_func(logits.permute(0,2,1), target)
+    
+
+    loss.backward()
+    print('eeek')
+    #compare the weights of the params
+    if epoch == 0:
+        initialize_params(model.transformer.trans.model)
+    if epoch == 9:
+        compare_params(model.transformer.trans.model)
+
+    "compare the grads"
+    '''if epoch == 0:
+        initialize_counter_grads(model.transformer.trans.model)
+    update_countner_grads(model.transformer.trans.model)'''
+    #import IPython;IPython.embed(); import sys;sys.exit(0)
+    optimizer.step()    
+
+
+    loss_np = loss.detach().cpu().numpy()
+    train_loss.append(loss_np)
+    #print('train_loss: %.5f' % (loss_np))
+            
+    total_acc = 0.1 #random
+
+    return np.mean(train_loss), total_acc
+
+def validate_test_parameters(loader, model, criterion, scaler, device, args, epoch):
+    model.eval()
+    val_loss = []
+    
+    with torch.no_grad():
+        i,img, caption_token,segment_ids,attention_mask,target = get_same_batch(loader,'eval')
+        #for i, (img, caption_token,segment_ids,attention_mask,target) in enumerate(loader):
+        img, caption_token,segment_ids,attention_mask,target = img.to(device), caption_token.to(device), segment_ids.to(device), attention_mask.to(device), target.to(device)
+        
+        caption_token = caption_token.squeeze(1)
+        attention_mask = attention_mask.squeeze(1)
+
+        loss_func = criterion
+        #optimizer.zero_grad()
+
+
+        logits = model(img, caption_token, segment_ids, attention_mask)
+        logits = logits.log_softmax(-1)  # (bs x seq_len x vocab_size)
+        loss = loss_func(logits.permute(0,2,1), target)
+        
+        
+        # loss.backward()
+        # optimizer.step()    
+
+
+        loss_np = loss.detach().cpu().numpy()
+        val_loss.append(loss_np)
+        #print('val_loss: %.5f' % (loss_np))
+            
+    total_acc = 0.1 #random
+
+    return np.mean(val_loss), None, total_acc
 
 class ROCO(Dataset):
     def __init__(self, args, df, tfm, keys, mode):
