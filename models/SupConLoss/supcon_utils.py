@@ -41,14 +41,12 @@ model_dict = {
 
 class SupConEncoder(nn.Module):
     """backbone + projection head"""
-    def __init__(self, encoder, name='resnet152', head='mlp', feat_dim=128):
+    def __init__(self, name='resnet152', head='mlp', feat_dim=128):
         super(SupConEncoder, self).__init__()
         dim_in = model_dict[name]
-        self.encoder = encoder
+        #self.encoder = encoder
         self.name = name
         self.gap = nn.AdaptiveAvgPool2d((1,1))
-        if 'resnet' in name:
-            self.encoder.fc = nn.Sequential()
         if head == 'linear':
             self.head = nn.Linear(dim_in, feat_dim)
         elif head == 'mlp':
@@ -66,16 +64,21 @@ class SupConEncoder(nn.Module):
         feat = F.normalize(self.head(feat), dim=1)
         return feat
 
+    def add_encoder(self, encoder):
+        self.encoder = encoder
+        if 'resnet' in self.name:
+            self.encoder.fc = nn.Sequential()
+
     def features(self,x):
         if 'resnet' in self.name:
             return self.encoder(x)
         elif 'efficientnetv2' in self.name:
             return self.gap(self.encoder.forward_features(x)).squeeze()
         elif 'efficientnet' in self.name:
-            return self.encoder.extract_features(x)
+            return self.gap(self.encoder.extract_features(x)).squeeze()
 
-def get_supcon_model(model, args):
-    return SupConEncoder(model.transformer.trans.model, name=args.cnn_encoder)
+def get_supcon_model(args):
+    return SupConEncoder(name=args.cnn_encoder)
 
 def jaccard_similarity(doc1, doc2): 
     

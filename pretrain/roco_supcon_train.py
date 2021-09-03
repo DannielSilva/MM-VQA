@@ -75,8 +75,12 @@ if __name__ == '__main__':
 
     model = Model(args)
     model.to(device)
-    supcon_model = get_supcon_model(model, args)
+    supcon_model = get_supcon_model(args)
     supcon_model.to(device)
+    supcon_model.add_encoder(model.transformer.trans.model)
+    print("supcon encoder device",next(supcon_model.encoder.parameters()).device)
+    print("supcon head device",next(supcon_model.head.parameters()).device)
+    
 
     wandb.watch(model, log='all')
 
