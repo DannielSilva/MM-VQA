@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+from models.serf import SERF
+
 class ResEncoderBlock(nn.Module):
     def __init__(self, emb_s = 32, head_cnt = 8, dp1 = 0.1, dp2 = 0.1):
         super().__init__()
@@ -18,10 +20,12 @@ class ResEncoderBlock(nn.Module):
         
         self.ff = nn.Sequential(
             nn.Linear(emb, 4 * emb),
-            nn.GELU(),
+            #nn.GELU(),
+            SERF(),
             nn.Linear(4 * emb, emb),
             nn.Dropout(dp2),
         )
+        print('Using SERF')
 
     def resmha(self, x, prev = None):
         B, T, _ = x.shape

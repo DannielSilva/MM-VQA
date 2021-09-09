@@ -2,6 +2,7 @@ from models.transformer import BertLayer
 from models.feedback_transformer_pytorch import FeedbackTransformer
 from models.realformer import ResEncoderBlock
 from models.image_encoding import get_transfer
+from models.serf import SERF
 import torch
 import torch.nn as nn
 from transformers import AutoTokenizer, AutoModel
@@ -129,7 +130,7 @@ class Model(nn.Module):
         super(Model,self).__init__()
         self.transformer = get_transformer_model(args)
         self.fc1 = nn.Linear(args.hidden_size, args.hidden_size)
-        self.activ1 = nn.Tanh()
+        self.activ1 = SERF()#nn.Tanh()
         self.classifier = nn.Sequential(nn.Linear(args.hidden_size, args.hidden_size),
                                         nn.LayerNorm(args.hidden_size, eps=1e-12, elementwise_affine=True),
                                         nn.Linear(args.hidden_size, args.vocab_size))
@@ -140,7 +141,7 @@ class Model(nn.Module):
         if self.dataset == 'roco':
             h = self.transformer(img, input_ids, segment_ids, input_mask)
             if self.task == 'MLM':
-                pooled_h = self.activ1(self.fc1(h))
+                pooled_h = self.activ1(self.fc1(h)) #fazer mean do h, com normalize
                 logits = self.classifier(pooled_h)
             elif self.task == 'distillation':
                 logits = h

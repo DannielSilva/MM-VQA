@@ -9,6 +9,7 @@ import timm
 
 models_dict = {5:   {'resnet152':[models.resnet152, [2048,1024,512,256,64]],
                      'tf_efficientnetv2_m':[timm.create_model,[1280,512,160,48,24]]
+                     #'tf_efficientnetv2_m':[timm.create_model,[24, 48, 80, 176, 512]]
                },
 
                7:   {'tf_efficientnetv2_m':[timm.create_model,[24,48,80,160,176,304,512]]}
@@ -19,6 +20,7 @@ def get_image_encoder(args):
         return m(pretrained=True), channel_size
     elif 'efficientnetv2' in args.cnn_encoder:
         return m(args.cnn_encoder, pretrained=True), channel_size
+        #return m(args.cnn_encoder, features_only=True,pretrained=True), channel_size
 
 def get_transfer(args):
     if 'resnet' in args.cnn_encoder:
@@ -75,6 +77,22 @@ class ResNetTransfer(Transfer):
         fix7 = nn.Sequential(*modules7)
         v_7 = self.gap7(self.relu(self.conv7(fix7(img)))).view(-1,self.args.hidden_size)
         return v_2, v_3, v_4, v_5, v_7
+
+#has problems to use after because it does not have .forward_features() method
+class Timm_EFfNetV2(Transfer):
+    def __init__(self, args):
+        super().__init__(args)
+
+    def forward(self, img):
+        o = self.model(img)
+        v_0 = self.gap2(self.relu(self.conv2(o[0]))).view(-1,self.args.hidden_size)
+        v_1 = self.gap3(self.relu(self.conv3(o[1]))).view(-1,self.args.hidden_size)
+        v_2 = self.gap4(self.relu(self.conv4(o[2]))).view(-1,self.args.hidden_size)
+        v_3 = self.gap5(self.relu(self.conv5(o[3]))).view(-1,self.args.hidden_size)
+        v_4 = self.gap7(self.relu(self.conv7(o[4]))).view(-1,self.args.hidden_size)
+        return v_0, v_1,v_2,v_3,v_4
+
+
 
 class EffNetV2Transfer(Transfer):
     def __init__(self, args):
@@ -136,10 +154,39 @@ class EffNetV2Transfer7Tokens(nn.Module):
 
         # block_0 = first + list(blocks[:1])
         # fix_0 = nn.Sequential(*block_0)
-        viz = []
-        for b in range(len(blocks)):
-            block_b = first + list(blocks[:(b+1)])
-            block_b_nn = nn.Sequential(*block_b)
-            viz.append(self.gap[b](self.relu(self.conv[b](block_b_nn(img)))).view(-1,self.args.hidden_size))
+
+        block_0 = first + list(blocks[:(0+1)])
+        block_0_nn = nn.Sequential(*block_0)
+        viz_0 = self.gap[0](self.relu(self.conv[0](block_0_nn(img)))).view(-1,self.args.hidden_size)
+
+        block_1 = first + list(blocks[:(1+1)])
+        block_1_nn = nn.Sequential(*block_1)
+        viz_1 = self.gap[1](self.relu(self.conv[1](block_1_nn(img)))).view(-1,self.args.hidden_size)
+
+        block_2 = first + list(blocks[:(2+1)])
+        block_2_nn = nn.Sequential(*block_2)
+        viz_2 = self.gap[2](self.relu(self.conv[2](block_2_nn(img)))).view(-1,self.args.hidden_size)
+
+        block_3 = first + list(blocks[:(3+1)])
+        block_3_nn = nn.Sequential(*block_3)
+        viz_3 = self.gap[3](self.relu(self.conv[3](block_3_nn(img)))).view(-1,self.args.hidden_size)
+
+        block_4 = first + list(blocks[:(4+1)])
+        block_4_nn = nn.Sequential(*block_4)
+        viz_4 = self.gap[4](self.relu(self.conv[4](block_4_nn(img)))).view(-1,self.args.hidden_size)
+
+        block_5 = first + list(blocks[:(5+1)])
+        block_5_nn = nn.Sequential(*block_5)
+        viz_5 = self.gap[5](self.relu(self.conv[5](block_5_nn(img)))).view(-1,self.args.hidden_size)
+
+        block_6 = first + list(blocks[:(6+1)])
+        block_6_nn = nn.Sequential(*block_6)
+        viz_6 = self.gap[6](self.relu(self.conv[6](block_6_nn(img)))).view(-1,self.args.hidden_size)
+        return viz_0 + viz_1 + viz_2 + viz_3 + viz_4 + viz_5 + viz_6
+        # viz = []
+        # for b in range(len(blocks)):
+        #     block_b = first + list(blocks[:(b+1)])
+        #     block_b_nn = nn.Sequential(*block_b)
+        #     viz.append(self.gap[b](self.relu(self.conv[b](block_b_nn(img)))).view(-1,self.args.hidden_size))
             
-        return viz[0], viz[1], viz[2], viz[3], viz[4], viz[5], viz[6]
+        # return viz[0], viz[1], viz[2], viz[3], viz[4], viz[5], viz[6]
