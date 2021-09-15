@@ -31,7 +31,10 @@ if __name__ == '__main__':
 
     parser.add_argument('--task', type=str, default='MLM',
                         choices=['MLM'], help='pretrain task for the model to be trained on')
+    parser.add_argument('--supcon', action='store_false', required = False, default = True,  help='flag of supcon task for the Model forward method')
     parser.add_argument('--clinicalbert', type=str, default='emilyalsentzer/Bio_ClinicalBERT')
+    parser.add_argument('--con_task', type=str, default='supcon',
+                        choices=['supcon', 'simclr'], help='pretrain task for the model to be trained on', required=True)
     parser.add_argument('--max_token_length', type=int, default=512, help='max token length for the transformer in distillation')
 
     parser.add_argument('--batch_size', type=int, default=16, help='batch_size.')
@@ -62,6 +65,8 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    #torch.autograd.set_detect_anomaly(True)
+
     assert args.dataset in args.data_dir
     wandb.init(project='medvqa', name = args.run_name, config = args)
 
@@ -75,13 +80,12 @@ if __name__ == '__main__':
 
     model = Model(args)
     model.to(device)
-    supcon_model = get_supcon_model(args)
-    supcon_model.to(device)
-    supcon_model.add_encoder(model.transformer.trans.model)
-    print("supcon encoder device",next(supcon_model.encoder.parameters()).device)
-    print("supcon head device",next(supcon_model.head.parameters()).device)
+    # supcon_model = get_supcon_model(args)
+    # supcon_model.to(device)
+    # supcon_model.add_encoder(model.transformer.trans.model)
+    # print("supcon encoder device",next(supcon_model.encoder.parameters()).device)
+    # print("supcon head device",next(supcon_model.head.parameters()).device)
     
-
     wandb.watch(model, log='all')
 
     optimizer = optim.Adam(model.parameters(),lr=args.lr)
@@ -150,8 +154,8 @@ if __name__ == '__main__':
         
         print(f'Epoch {epoch+1}/{args.epochs}')
 
-        #train routine from SupCon, regular validation loader, model, supcon_model, criterion, supcon_loss, optimizer, device, args, epoch
-        train_loss, train_acc = train_one_epoch(trainloader, model, supcon_model, criterion, supcon_loss, optimizer, device, args, epoch)
+        #train routine from SupCon, regular validation loader, model, criterion, supcon_loss, optimizer, device, args, epoch
+        train_loss, train_acc = train_one_epoch(trainloader, model, criterion, supcon_loss, optimizer, device, args, epoch)
         val_loss, predictions, acc = validate(valloader, model, criterion, scaler, device, args, epoch)
 
         scheduler.step(val_loss)

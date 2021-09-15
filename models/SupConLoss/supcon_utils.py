@@ -100,7 +100,9 @@ def jaccard_similarity(doc1, doc2):
         print('union == 0\n1st: ', doc1,'\n2nd: ',doc2)
         return 0.0
 
-def buildMask(bsz,caption, aug):
+def buildMask(bsz,caption, aug, con_task):
+    if con_task == 'simclr':
+        return None
     mask = torch.zeros(bsz, bsz, dtype=torch.float)
     for c1 in range(len(caption)):
         for c2 in range(len(aug)):
@@ -138,12 +140,21 @@ class ROCO_SupCon(Dataset):
         caption = self.df[idx, 2].strip()       
         tokens, segment_ids, input_mask, targets = encode_text(caption, self.tokenizer, self.keys, self.args, self.clinicalbert)
 
-        aug_caption = self.translate_caption(caption)
+        aug_caption = self.get_translation(idx)    #self.translate_caption(caption)
         aug_tokens, _, _, aug_targets = encode_text(aug_caption, self.tokenizer, self.keys, self.args, self.clinicalbert)
         
 
         return img, tokens, aug_tokens, segment_ids, input_mask, targets, aug_targets, caption, aug_caption
 
+    def get_translation(self, idx):
+        #get translation from table in columns from 3 to 5 inclusive
+
+        # table columns
+        # 0     1        2    3  4  5
+        # id img_name caption fr de es
+        i = random.randint(3,5)
+        return self.df[idx, i].strip()  
+        
     def translate_caption(self, caption):
         langs = ['fr','de','pt']
         l = random.choice(langs)
@@ -156,7 +167,75 @@ def process_tensors(img,caption_token,aug_tokens,segment_ids,attention_mask,targ
         return torch.cat([a,b], dim=0)
     return cat_tensors(img[0],img[1]),cat_tensors(caption_token,aug_tokens),cat_tensors(segment_ids,segment_ids),cat_tensors(attention_mask,attention_mask),cat_tensors(target,aug_targets)
 
-def train_one_epoch(loader, model, supcon_model, criterion, supcon_loss, optimizer, device, args, epoch):
+
+def split_feat(feat,bsz):
+    f1, f2 = torch.split(feat, [bsz, bsz], dim=0) # (bs//2 x feat_dim), (bs//2 x feat_dim)
+    return torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1) # (bs//2, 2, feat_dim) 
+
+def train_one_epoch(loader, model, criterion, supcon_loss, optimizer, device, args, epoch):
+
+    model.train()
+    train_loss = []
+    PREDS = []
+    TARGETS = []
+    bar = tqdm(loader, leave=False)
+    for i, (img, caption_token,aug_tokens,segment_ids,attention_mask,target,aug_targets,caption_text,aug_text) in enumerate(bar):
+        img,caption_token,segment_ids,attention_mask,target = process_tensors(img,caption_token,aug_tokens,segment_ids,attention_mask,target,aug_targets)
+        img, caption_token,segment_ids,attention_mask,target = img.to(device), caption_token.to(device), segment_ids.to(device), attention_mask.to(device), target.to(device)
+        
+        caption_token = caption_token.squeeze(1)
+        attention_mask = attention_mask.squeeze(1)
+    
+        loss_func = criterion
+        optimizer.zero_grad()
+        
+        logits, feat = model(img, caption_token, segment_ids, attention_mask) # (bs x seq_len x vocab_size) , (bs x feat_dim)
+        logits = logits.log_softmax(-1)  # (bs x seq_len x vocab_size)
+        loss = loss_func(logits.permute(0,2,1), target)  
+        
+        bsz = img.shape[0] //2
+        feat = split_feat(feat,bsz) 
+        mask = buildMask(bsz,caption_text, aug_text, args.con_task) #mask=None if simclr else mask built with jaccard similarity for supcon
+        loss_supcon = supcon_loss(feat)#supcon_loss(features, mask=mask)
+
+        loss = loss + loss_supcon
+
+        # print('e')
+        # import IPython; IPython.embed(); import sys; sys.exit(0)
+        loss.backward()
+        optimizer.step()    
+
+
+        bool_label = target > 0
+        acc = 0.0
+        if bool_label.any():
+            pred = logits[bool_label, :].argmax(1)
+            valid_labels = target[bool_label]   
+            
+            PREDS.append(pred)
+            TARGETS.append(valid_labels)
+            
+            acc = (pred == valid_labels).type(torch.float).mean() * 100.
+
+        loss_np = loss.detach().cpu().numpy()
+        train_loss.append(loss_np)
+        
+        
+        bar.set_description('train_loss: %.5f, train_acc: %.2f' % (loss_np, acc))
+        
+
+        
+    PREDS = torch.cat(PREDS).cpu().numpy()
+    TARGETS = torch.cat(TARGETS).cpu().numpy()
+
+#     # Calculate total accuracy
+    total_acc = (PREDS == TARGETS).mean() * 100.
+
+
+    return np.mean(train_loss), total_acc
+
+#this method used old supcon encoder
+def train_one_epoch_old(loader, model, supcon_model, criterion, supcon_loss, optimizer, device, args, epoch):
 
     model.train()
     train_loss = []
@@ -191,19 +270,18 @@ def train_one_epoch(loader, model, supcon_model, criterion, supcon_loss, optimiz
         loss.backward()
         optimizer.step()    
 
-        # print('e')
-        # import IPython; IPython.embed(); import sys; sys.exit(0)
            
     
         bool_label = target > 0
-
-        pred = logits[bool_label, :].argmax(1)
-        valid_labels = target[bool_label]   
-        
-        PREDS.append(pred)
-        TARGETS.append(valid_labels)
-        
-        acc = (pred == valid_labels).type(torch.float).mean() * 100.
+        acc = 0.0
+        if bool_label.any():
+            pred = logits[bool_label, :].argmax(1)
+            valid_labels = target[bool_label]   
+            
+            PREDS.append(pred)
+            TARGETS.append(valid_labels)
+            
+            acc = (pred == valid_labels).type(torch.float).mean() * 100.
 
         loss_np = loss.detach().cpu().numpy()
         train_loss.append(loss_np)

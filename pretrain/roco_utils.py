@@ -88,9 +88,10 @@ def load_mlm_data(args):
     # test_data = pd.read_csv(os.path.join(test_path, 'testdata.csv'))
     # test_data = test_data[test_data['name'].isin(test_image_names)]
     
-
-    train_data = train_data.sample(frac = args.train_pct)
-    val_data = val_data.sample(frac = args.valid_pct)
+    if args.train_pct != 1.0:
+        train_data = train_data.sample(frac = args.train_pct)
+    if args.valid_pct != 1.0:
+        val_data = val_data.sample(frac = args.valid_pct)
     # test_data = test_data.sample(frac = args.test_pct)
         
     return train_data, val_data
