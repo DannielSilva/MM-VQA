@@ -126,7 +126,7 @@ class FeedBackTransformer(TransformerAbstract):
         return self.block(h)
 
 class Model(nn.Module):
-    def __init__(self,args):
+    def __init__(self,args, feat_dim=128):
         super(Model,self).__init__()
         self.transformer = get_transformer_model(args)
         self.fc1 = nn.Linear(args.hidden_size, args.hidden_size)
@@ -137,12 +137,24 @@ class Model(nn.Module):
         self.task = args.task
         self.dataset = args.dataset
 
+        self.supcon = args.supcon if hasattr(args, 'supcon') else False
+        print('supcon task in model', self.supcon)
+        if self.supcon:
+            self.head = nn.Sequential(
+                nn.Linear(args.hidden_size, args.hidden_size),
+                SERF(),
+                nn.Linear(args.hidden_size, feat_dim)
+            )
+
     def forward(self, img, input_ids, segment_ids, input_mask):
         if self.dataset == 'roco':
             h = self.transformer(img, input_ids, segment_ids, input_mask)
             if self.task == 'MLM':
-                pooled_h = self.activ1(self.fc1(h)) #fazer mean do h, com normalize
+                pooled_h = self.activ1(self.fc1(h))
                 logits = self.classifier(pooled_h)
+                if self.supcon: #if supcon, also return the features for the supcon loss
+                    feat = F.normalize(self.head(h.mean(1)), dim=1) #reduce dimensions of the features and normalize
+                    return logits, feat
             elif self.task == 'distillation':
                 logits = h
             return logits
