@@ -300,8 +300,7 @@ def train_one_epoch_old(loader, model, supcon_model, criterion, supcon_loss, opt
 
     return np.mean(train_loss), total_acc
 
-'''delete this vvvv'''
-def validate(loader, model, supcon_model,criterion, supcon_loss, scaler, device, args, epoch):
+def validate(loader, model,criterion, scaler, device, args, epoch):
 
     model.eval()
     val_loss = []
@@ -320,7 +319,7 @@ def validate(loader, model, supcon_model,criterion, supcon_loss, scaler, device,
             loss_func = criterion
 
             
-            logits = model(img, caption_token, segment_ids, attention_mask)
+            logits, _ = model(img, caption_token, segment_ids, attention_mask)
             
             logits = logits.log_softmax(-1)  # (bs x seq_len x vocab_size)
             loss = loss_func(logits.permute(0,2,1), target)
@@ -328,13 +327,15 @@ def validate(loader, model, supcon_model,criterion, supcon_loss, scaler, device,
 
             
             bool_label = target > 0
-            pred = logits[bool_label, :].argmax(1)
-            valid_labels = target[bool_label]   
-        
-            PREDS.append(pred)
-            TARGETS.append(valid_labels)
+            acc = 0.0
+            if bool_label.any():
+                pred = logits[bool_label, :].argmax(1)
+                valid_labels = target[bool_label]   
             
-            acc = (pred == valid_labels).type(torch.float).mean() * 100.
+                PREDS.append(pred)
+                TARGETS.append(valid_labels)
+            
+                acc = (pred == valid_labels).type(torch.float).mean() * 100.
 
             loss_np = loss.detach().cpu().numpy()
 
@@ -353,4 +354,3 @@ def validate(loader, model, supcon_model,criterion, supcon_loss, scaler, device,
     total_acc = (PREDS == TARGETS).mean() * 100.
 
     return val_loss, PREDS, total_acc
-'''delete this ^^^^'''

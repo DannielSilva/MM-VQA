@@ -11,11 +11,11 @@ from torchvision import transforms
 from torch import optim
 from torch.optim import lr_scheduler
 
-from roco_utils import load_mlm_data,get_keywords, ROCO, validate
+from roco_utils import load_mlm_data,get_keywords, ROCO#, validate
 
 from models.mmbert import Model, get_transformer_model
 
-from models.SupConLoss.supcon_utils import ROCO_SupCon, train_one_epoch, get_supcon_model, TwoCropTransform
+from models.SupConLoss.supcon_utils import ROCO_SupCon, train_one_epoch, get_supcon_model, TwoCropTransform, validate
 from models.SupConLoss.loss import SupConLoss
 
 if __name__ == '__main__':
