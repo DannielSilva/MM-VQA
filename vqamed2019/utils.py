@@ -3,8 +3,8 @@ import numpy as np
 import pandas as pd
 import random
 import math
-import cv2
-
+#import cv2
+from PIL import Image
 import torch
 from torchvision import transforms, models
 from torch.cuda.amp import GradScaler
@@ -243,7 +243,7 @@ class VQAMed(Dataset):
         # if self.args.smoothing:
         #     answer = onehot(self.args.num_classes, answer)
 
-        img = cv2.imread(path)
+        img = Image.open(path).convert('RGB')#cv2.imread(path)
 
         if self.tfm:
             img = self.tfm(img)
@@ -283,7 +283,7 @@ class VQAMed_Binary(Dataset):
         if self.args.smoothing:
             answer = onehot(self.args.num_classes, answer)
 
-        img = cv2.imread(path)
+        img = Image.open(path).convert('RGB')#img = cv2.imread(path)
 
 
         if self.tfm:

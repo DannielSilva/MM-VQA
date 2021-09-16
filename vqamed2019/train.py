@@ -19,6 +19,7 @@ import warnings
 #from albumentations.pytorch.transforms import ToTensorV2
 
 from models.mmbert import Model
+from models.asl_singlelabel import ASLSingleLabel
 
 warnings.simplefilter("ignore", UserWarning)
 
@@ -31,6 +32,7 @@ if __name__ == '__main__':
     parser.add_argument('--run_name', type = str, required = True, help = "run name for wandb")
     parser.add_argument('--data_dir', type = str, required = False, default = "ImageClef-2019-VQA-Med", help = "path for data")
     parser.add_argument('--model_dir', type = str, required = False, default = "MMBERT/pretrain/val_loss_3.pt", help = "path to load weights")
+    parser.add_argument('--resume_dir', type = str, required = False, default = "ImageClef-2019-VQA-Med/mmbert/MLM/model.pt", help = "path to load weights")
     parser.add_argument('--save_dir', type = str, required = False, default = "ImageClef-2019-VQA-Med/mmbert", help = "path to save weights")
     parser.add_argument('--category', type = str, required = False, default = None,  help = "choose specific category if you want")
     parser.add_argument('--use_pretrained', action = 'store_true', default = False, help = "use pretrained weights or not")
@@ -72,10 +74,10 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='VQA-Med', help='roco or vqamed2019')
     parser.add_argument('--cnn_encoder', type=str, default='resnet152', help='name of the cnn encoder')
     parser.add_argument('--transformer_model', type=str, default='transformer',choices=['transformer', 'realformer', 'feedback-transformer'], help='name of the transformer model')
-
+    parser.add_argument('--loss', type=str, default='CrossEntropyLoss', choices=['CrossEntropyLoss', 'ASLSingleLabel'], help='loss to evaluate model on')
 
     args = parser.parse_args()
-    print(args.wandb)
+    print('Using wandb',args.wandb)
     if args.wandb:
         wandb.init(project='medvqa', name = args.run_name, config = args) #settings=wandb.Settings(start_method='fork'),
 
@@ -121,17 +123,24 @@ if __name__ == '__main__':
     if args.use_pretrained:
         print('loading model from roco')
         print(args.model_dir)
-        model.load_state_dict(torch.load(args.model_dir))
+        model_dict = model.state_dict()
+        pretrained_dict = torch.load(args.model_dir)
+        # 1. filter out unnecessary keys
+        pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+        # 2. overwrite entries in the existing state dict
+        model_dict.update(pretrained_dict) 
+        # 3. load the new state dict
+        model.load_state_dict(model_dict)
+        # change classifier final layer for the current problem
         model.classifier[2] = nn.Linear(args.hidden_size, num_classes)
-## TODO: have to change this resume training if statement
+
     if args.resume_training:
-        print('resume training')
+        print('resume training', args.resume_dir)
         model.classifier[2] = nn.Linear(args.hidden_size, num_classes)
-        before = args.run_name.split('-')[-1]
-        before = args.run_name.split(('-'))[0] + '-' + str(int(before)-1) +"_acc.pt"
-        path = os.path.join(args.save_dir, before)
-        print(path)
-        model.load_state_dict(torch.load(path))
+        # before = args.run_name.split('-')[-1]
+        # before = args.run_name.split(('-'))[0] + '-' + str(int(before)-1) +"_acc.pt"
+        # path = os.path.join(args.save_dir, before)
+        model.load_state_dict(torch.load(args.resume_dir))
 
     if not args.use_pretrained and not args.resume_training:
         print('from scratch')
@@ -151,19 +160,23 @@ if __name__ == '__main__':
 
 
     if args.smoothing:
-        print('smoothing')
+        print('Using label smoothing')
         #criterion = LabelSmoothing(smoothing=args.smoothing)
         criterion = LabelSmoothByCategory(train_df=train_df,num_classes=args.num_classes,device=device)
         print(criterion.plane_tensor)
-    else:
+    elif args.loss == 'CrossEntropyLoss':
+        print('Using CrossEntropyLoss')
         criterion = nn.CrossEntropyLoss()
+    elif args.loss == 'ASLSingleLabel':
+        print('Using ASLSingleLabel')
+        criterion = ASLSingleLabel()
 
     scaler = GradScaler()
 
 
     train_tfm = transforms.Compose([
                                     
-                                    transforms.ToPILImage(),
+                                    #transforms.ToPILImage(),
                                     transforms.Resize(224), #added with profs
                                     transforms.CenterCrop(224), #added with profs
                                     transforms.RandomResizedCrop(224,scale=(0.75,1.25),ratio=(0.75,1.25)),
@@ -174,13 +187,13 @@ if __name__ == '__main__':
                                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
 
-    val_tfm = transforms.Compose([transforms.ToPILImage(),
+    val_tfm = transforms.Compose([#transforms.ToPILImage(),
                                 transforms.Resize(224), #added with profs
                                 transforms.CenterCrop(224), #added with profs
                                 transforms.ToTensor(), 
                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-    test_tfm = transforms.Compose([transforms.ToPILImage(),
+    test_tfm = transforms.Compose([#transforms.ToPILImage(),
                                 transforms.Resize(224), #added with profs
                                 transforms.CenterCrop(224), #added with profs
                                 transforms.ToTensor(), 
@@ -202,11 +215,7 @@ if __name__ == '__main__':
     best_loss = np.inf
     counter = 0
 
-    # criterion = LabelSmoothByCategory(train_df=train_df,num_classes=args.num_classes,device=device)
-    # for (img, question_token,segment_ids,attention_mask,target, imgid, category) in trainloader:
-    #     logits, _, _ = model(img, question_token, segment_ids, attention_mask)
-    #     loss = criterion(logits, target, category)
-    # import IPython; IPython.embed(); exit(1)
+
     for epoch in range(args.epochs):
 
         print(f'Epoch {epoch+1}/{args.epochs}')
