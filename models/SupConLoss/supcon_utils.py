@@ -106,7 +106,10 @@ def buildMask(bsz,caption, aug, con_task):
     mask = torch.zeros(bsz, bsz, dtype=torch.float)
     for c1 in range(len(caption)):
         for c2 in range(len(aug)):
-            mask[c1,c2] = jaccard_similarity(caption[c1],aug[c2])
+            if c1 != c2:
+                mask[c1,c2] = jaccard_similarity(caption[c1],aug[c2])
+            else:
+                mask[c1,c2] = 1.0
     
     return mask
 
@@ -196,12 +199,12 @@ def train_one_epoch(loader, model, criterion, supcon_loss, optimizer, device, ar
         bsz = img.shape[0] //2
         feat = split_feat(feat,bsz) 
         mask = buildMask(bsz,caption_text, aug_text, args.con_task) #mask=None if simclr else mask built with jaccard similarity for supcon
+        import IPython; IPython.embed(); import sys; sys.exit(0)
         loss_supcon = supcon_loss(feat)#supcon_loss(features, mask=mask)
 
         loss = loss + loss_supcon
 
         # print('e')
-        # import IPython; IPython.embed(); import sys; sys.exit(0)
         loss.backward()
         optimizer.step()    
 

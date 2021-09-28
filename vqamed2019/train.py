@@ -237,6 +237,7 @@ if __name__ == '__main__':
 
             if args.wandb:
                 log_dict['train_loss'] = train_loss
+                log_dict['val_loss'] = val_loss
                 log_dict['test_loss'] = test_loss
                 log_dict['learning_rate'] = optimizer.param_groups[0]["lr"]
                 log_dict['val_total_acc'] = val_acc['val_total_acc']
@@ -280,4 +281,5 @@ if __name__ == '__main__':
         else:
             counter+=1
             if counter > 20:
+                print('Counter expired, finishing.')
                 break      
