@@ -199,7 +199,7 @@ def train_one_epoch(loader, model, criterion, supcon_loss, optimizer, device, ar
         bsz = img.shape[0] //2
         feat = split_feat(feat,bsz) 
         mask = buildMask(bsz,caption_text, aug_text, args.con_task) #mask=None if simclr else mask built with jaccard similarity for supcon
-        import IPython; IPython.embed(); import sys; sys.exit(0)
+        #import IPython; IPython.embed(); import sys; sys.exit(0)
         loss_supcon = supcon_loss(feat)#supcon_loss(features, mask=mask)
 
         loss = loss + loss_supcon
