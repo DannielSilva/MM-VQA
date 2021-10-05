@@ -15,8 +15,10 @@ from roco_utils import load_mlm_data,get_keywords, ROCO#, validate
 
 from models.mmbert import Model, get_transformer_model
 
-from models.SupConLoss.supcon_utils import ROCO_SupCon, train_one_epoch, get_supcon_model, TwoCropTransform, validate
+from models.SupConLoss.supcon_utils import ROCO_SupCon, train_one_epoch, get_supcon_model, TwoCropTransform, validate, SimilarityCalculator
 from models.SupConLoss.loss import SupConLoss
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 if __name__ == '__main__':
     __spec__ = None
@@ -34,7 +36,9 @@ if __name__ == '__main__':
     parser.add_argument('--supcon', action='store_false', required = False, default = True,  help='flag of supcon task for the Model forward method')
     parser.add_argument('--clinicalbert', type=str, default='emilyalsentzer/Bio_ClinicalBERT')
     parser.add_argument('--con_task', type=str, default='supcon',
-                        choices=['supcon', 'simclr'], help='pretrain task for the model to be trained on', required=True)
+                        choices=['supcon', 'simclr'], help='pretrain contrastive task', required=True)
+    parser.add_argument('--similarity', type=str, default='jaccard_similarity',
+    choices=['jaccard', 'cosine','sentence_transformers'], help='similarity to build mask for SupCon loss', required=True)
     parser.add_argument('--max_token_length', type=int, default=512, help='max token length for the transformer in distillation')
 
     parser.add_argument('--batch_size', type=int, default=16, help='batch_size.')
@@ -80,6 +84,9 @@ if __name__ == '__main__':
 
     model = Model(args)
     model.to(device)
+
+    sim_calculator=SimilarityCalculator(args, device).to(device) if args.con_task == 'supcon' else None
+
     # supcon_model = get_supcon_model(args)
     # supcon_model.to(device)
     # supcon_model.add_encoder(model.transformer.trans.model)
@@ -155,7 +162,7 @@ if __name__ == '__main__':
         print(f'Epoch {epoch+1}/{args.epochs}')
 
         #train routine from SupCon, regular validation loader, model, criterion, supcon_loss, optimizer, device, args, epoch
-        train_loss, train_acc = train_one_epoch(trainloader, model, criterion, supcon_loss, optimizer, device, args, epoch)
+        train_loss, train_acc = train_one_epoch(trainloader, model, criterion, supcon_loss, optimizer, device, args, epoch, sim_calculator)
         val_loss, predictions, acc = validate(valloader, model, criterion, scaler, device, args, epoch)
 
         scheduler.step(val_loss)
