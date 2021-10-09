@@ -83,21 +83,23 @@ class ResNetTransfer(Transfer):
         v_7 = self.gap7(self.serf(self.conv7(fix7(img)))).view(-1,self.args.hidden_size)
         return v_2, v_3, v_4, v_5, v_7
 
-#has problems to use after because it does not have .forward_features() method
 class Timm_EFfNetV2(Transfer):
     def __init__(self, args):
         super().__init__(args)
-        print('timm serf')
+        #print('timm serf')
         self.relu = nn.ReLU()
+        self.activation = self.relu if args.use_relu else self.serf
+        print('timm ' + 'relu' if args.use_relu else 'serf')
+        
 
     def forward(self, img):
         o = self.model(img)
         #v_0 = self.gap2(self.serf(F.normalize(self.conv2(o[0]),dim=1))).view(-1,self.args.hidden_size)
-        v_0 = self.gap2(self.serf(self.conv2(o[0]))).view(-1,self.args.hidden_size)
-        v_1 = self.gap3(self.serf(self.conv3(o[1]))).view(-1,self.args.hidden_size)
-        v_2 = self.gap4(self.serf(self.conv4(o[2]))).view(-1,self.args.hidden_size)
-        v_3 = self.gap5(self.serf(self.conv5(o[3]))).view(-1,self.args.hidden_size)
-        v_4 = self.gap7(self.serf(self.conv7(o[4]))).view(-1,self.args.hidden_size)
+        v_0 = self.gap2(self.activation(self.conv2(o[0]))).view(-1,self.args.hidden_size)
+        v_1 = self.gap3(self.activation(self.conv3(o[1]))).view(-1,self.args.hidden_size)
+        v_2 = self.gap4(self.activation(self.conv4(o[2]))).view(-1,self.args.hidden_size)
+        v_3 = self.gap5(self.activation(self.conv5(o[3]))).view(-1,self.args.hidden_size)
+        v_4 = self.gap7(self.activation(self.conv7(o[4]))).view(-1,self.args.hidden_size)
         #import IPython; IPython.embed(); import sys; sys.exit(0)
         return v_0, v_1, v_2, v_3, v_4
         #return F.normalize(v_0, dim=1),  F.normalize(v_1, dim=1), F.normalize(v_2, dim=1), F.normalize(v_3, dim=1), F.normalize(v_4, dim=1)

@@ -57,6 +57,7 @@ if __name__ == '__main__':
     parser.add_argument('--transformer_model', type=str, default='transformer',choices=['transformer', 'realformer', 'feedback-transformer'], help='name of the transformer model')
 
     parser.add_argument('--num_vis', type = int, default=5, help = "num of visual embeddings")
+    parser.add_argument('--use_relu', action = 'store_true', default = False, help = "use ReLu")
 
     args = parser.parse_args()
     
