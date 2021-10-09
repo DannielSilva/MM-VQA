@@ -96,7 +96,8 @@ class SimilarityCalculator(nn.Module):
             # self.layer = nn.Linear(768, 768)
             # self.w = self.layer.weight.clone().detach()
         elif args.similarity == 'sentence_transformers':
-            self.model = SentenceTransformer('all-MiniLM-L6-v2')
+            #name='all-MiniLM-L6-v2'
+            self.model = SentenceTransformer('all-mpnet-base-v2')
 
     def jaccard(self,caption,aug,bsz):
         mask = torch.zeros(bsz, bsz, dtype=torch.float)
@@ -151,11 +152,12 @@ class SimilarityCalculator(nn.Module):
 
 
     def sentence_trans(self,doc1,doc2,bsz):
-        emb1 = self.model.encode(doc1)
-        emb2 = self.model.encode(doc2)
+        with torch.no_grad():
+            emb1 = self.model.encode(doc1)
+            emb2 = self.model.encode(doc2)
 
-        #assert da shape com bsz
-        return util.cos_sim(emb1, emb2).fill_diagonal_(1)
+            #assert da shape com bsz
+            return util.cos_sim(emb1, emb2).fill_diagonal_(1)
 
     def forward(self,doc1,doc2,bsz):
         if self.similarity == 'cosine':
@@ -255,7 +257,7 @@ def train_one_epoch(loader, model, criterion, supcon_loss, optimizer, device, ar
         logits = logits.log_softmax(-1)  # (bs x seq_len x vocab_size)
         loss = loss_func(logits.permute(0,2,1), target)  
         
-        bsz = img.shape[0] //2
+        bsz = img.shape[0] //2 #2 = n_views
         feat = split_feat(feat,bsz) 
         mask = buildMask(bsz,caption_text, aug_text, args, sim_calculator) #mask=None if simclr else mask built with [jaccard,cosine,sentence_transformers] similarity for supcon
         loss_supcon = supcon_loss(feat)#supcon_loss(features, mask=mask)
