@@ -49,6 +49,8 @@ class TransformerAbstract(nn.Module):
         self.bert_embedding = self.get_bert_embedding(args)
         self.trans = get_transfer(args)
 
+        self.grad_cam = args.grad_cam
+
     def get_bert_embedding(self,args):
         bert_name = get_bert_model(args)
         base_model = AutoModel.from_pretrained(bert_name)
@@ -99,11 +101,29 @@ class RealFormer(TransformerAbstract):
         print('RealFormer from abstract')
         head_cnt = 8
         self.mains = nn.Sequential(*[ResEncoderBlock(emb_s = args.hidden_size // head_cnt, head_cnt = head_cnt, dp1 = 0.1, dp2 = 0.1) for _ in range(args.n_layers)])
+        self.n_layers = args.n_layers
+        self.grad_cam = args.grad_cam if hasattr(args, 'grad_cam') else False
+        if self.grad_cam:
+            print('Changing forward method')
+            RealFormer.__call__ = RealFormer.forward_grad_cam
     def forward(self, img, input_ids, token_type_ids, mask):
         h = self.prepare_input(img, input_ids, token_type_ids, mask)
         prev = None
         for resencoder in self.mains:
             h, prev = resencoder(h, prev = prev)
+        return h
+    def forward_grad_cam(self, h):
+        prev = None
+        last = False
+        for i,resencoder in enumerate(self.mains):
+            print(i)
+            if i == self.n_layers - 1:
+                last = True
+                h = resencoder(h, prev = prev, last=last)
+                print('shape h',h.shape)
+                return h
+
+            h, prev = resencoder(h, prev = prev, last=last)
         return h
 
 class FeedBackTransformer(TransformerAbstract):
@@ -137,6 +157,11 @@ class Model(nn.Module):
         self.task = args.task
         self.dataset = args.dataset
 
+        self.grad_cam = args.grad_cam if hasattr(args, 'grad_cam') else False
+        print('gradcam', self.grad_cam)
+        if self.grad_cam:
+            print('Changing forward method')
+            Model.__call__ = Model.forward_grad_cam
         self.supcon = args.supcon if hasattr(args, 'supcon') else False
         print('supcon task in model', self.supcon)
         if self.supcon:
@@ -145,6 +170,12 @@ class Model(nn.Module):
                 SERF(),
                 nn.Linear(args.hidden_size, feat_dim)
             )
+    def forward_grad_cam(self, h):
+        h = self.transformer(h)
+        pooled_h = self.activ1(self.fc1(h.mean(1)))
+        print('shape', pooled_h.shape)
+        logits = self.classifier(pooled_h)
+        return logits
 
     def forward(self, img, input_ids, segment_ids, input_mask):
         if self.dataset == 'roco':

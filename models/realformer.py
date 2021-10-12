@@ -41,9 +41,11 @@ class ResEncoderBlock(nn.Module):
         res = torch.einsum('btih,bihs->bths', att, v).reshape(B, T, -1) #B, T, h * emb_s
         return self.dp(self.proj(res)), prev
     
-    def forward(self, x, prev = None): ## add & norm later.
+    def forward(self, x, prev = None, last=False): ## add & norm later.
         rmha, prev =  self.resmha(x, prev = prev)
         x = self.ln1(x + rmha)
         x = self.ln2(x + self.ff(x))
 
+        if last:
+            return x
         return x, prev
