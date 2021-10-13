@@ -20,6 +20,8 @@ from PIL import Image
 from roco_utils import encode_text
 from torch.utils.data import Dataset, DataLoader
 
+from bert_score import BERTScorer
+
 
 class TwoCropTransform:
     """Create two crops of the same image"""
@@ -98,6 +100,12 @@ class SimilarityCalculator(nn.Module):
         elif args.similarity == 'sentence_transformers':
             #name='all-MiniLM-L6-v2'
             self.model = SentenceTransformer('all-mpnet-base-v2')
+        elif args.similarity == 'bert_score':
+            print('Using bert score', args.bert_score)
+            if args.bert_score == 'bert':
+                self.scorer = BERTScorer(lang="en", rescale_with_baseline=True)
+            elif args.bert_score == 'scibert':
+                self.scorer = BERTScorer(lang="en",model_type='allenai/scibert_scivocab_uncased')
 
     def jaccard(self,caption,aug,bsz):
         mask = torch.zeros(bsz, bsz, dtype=torch.float)
@@ -159,6 +167,20 @@ class SimilarityCalculator(nn.Module):
             #assert da shape com bsz
             return util.cos_sim(emb1, emb2).fill_diagonal_(1)
 
+    def bert_score(self,caption,aug,bsz):
+        mask = torch.zeros(bsz, bsz, dtype=torch.float)
+        for c1 in range(len(caption)):
+            for c2 in range(len(aug)):
+                if c1 != c2:
+                    mask[c1,c2] = self.calc_bert_score(caption[c1],aug[c2])
+                else:
+                    mask[c1,c2] = 1.0
+        return mask
+
+    def calc_bert_score(self,doc1, doc2):
+        _,_, F1 = self.scorer.score([doc1], [doc2]) #P, R, F1
+        return F1.item()
+
     def forward(self,doc1,doc2,bsz):
         if self.similarity == 'cosine':
             return self.bert_embedd(doc1,doc2,bsz)
@@ -166,6 +188,8 @@ class SimilarityCalculator(nn.Module):
             return self.jaccard(doc1,doc2,bsz)
         elif self.similarity == 'sentence_transformers':
             return self.sentence_trans(doc1,doc2, bsz)
+        elif self.similarity == 'bert_score':
+            return self.bert_score(doc1,doc2, bsz)
 
 
 def buildMask(bsz,caption, aug, args, sim_calculator):
