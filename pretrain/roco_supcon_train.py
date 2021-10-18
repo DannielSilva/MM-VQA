@@ -30,7 +30,8 @@ if __name__ == '__main__':
     parser.add_argument('--mlm_prob', type=float, required = True, help='probability of token being masked')
     parser.add_argument('--mixed_precision', action='store_true', required = False, default = False,  help='mixed precision training or not')
     parser.add_argument('--resume', action='store_true', required = False, default = False,  help='resume training or train from scratch')
-
+    parser.add_argument('--resume_dir', type = str, required = False, default = "ImageClef-2019-VQA-Med/mmbert/MLM/model.pt", help = "path to load weights")
+    parser.add_argument('--no_recorder', action='store_true', required = False, default = False,  help='flag to NOT load recorder with optimizer and scaler')
     parser.add_argument('--task', type=str, default='MLM',
                         choices=['MLM'], help='pretrain task for the model to be trained on')
     parser.add_argument('--supcon', action='store_false', required = False, default = True,  help='flag of supcon task for the Model forward method')
@@ -38,7 +39,9 @@ if __name__ == '__main__':
     parser.add_argument('--con_task', type=str, default='supcon',
                         choices=['supcon', 'simclr'], help='pretrain contrastive task', required=True)
     parser.add_argument('--similarity', type=str, default='jaccard_similarity',
-    choices=['jaccard', 'cosine','sentence_transformers'], help='similarity to build mask for SupCon loss', required=True)
+    choices=['jaccard', 'cosine','sentence_transformers','bert_score'], help='similarity to build mask for SupCon loss', required=True)
+    parser.add_argument('--bert_score', type=str, default='bert',choices=['bert', 'scibert'], help='name of model for BERTscore')
+
     parser.add_argument('--max_token_length', type=int, default=512, help='max token length for the transformer in distillation')
 
     parser.add_argument('--batch_size', type=int, default=16, help='batch_size.')
@@ -64,6 +67,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='roco', help='roco or vqamed2019')
     parser.add_argument('--cnn_encoder', type=str, default='resnet152', help='name of the cnn encoder')
     parser.add_argument('--transformer_model', type=str, default='transformer',choices=['transformer', 'realformer', 'feedback-transformer'], help='name of the transformer model')
+    parser.add_argument('--use_relu', action = 'store_true', default = False, help = "use ReLu")
 
     parser.add_argument('--num_vis', type = int, default=5, help = "num of visual embeddings")
 
@@ -103,8 +107,8 @@ if __name__ == '__main__':
 
     train_tfm = TwoCropTransform(transforms.Compose([
                                 
-                                transforms.Resize(224), #added with profs
-                                transforms.CenterCrop(224), #added with profs
+                                transforms.Resize(224), 
+                                transforms.CenterCrop(224), 
                                 transforms.RandomResizedCrop(224,scale=(0.95,1.05),ratio=(0.95,1.05)),
                                 transforms.RandomRotation(5),
                                 transforms.ColorJitter(brightness=0.05,contrast=0.05,saturation=0.05,hue=0.05),
@@ -113,8 +117,8 @@ if __name__ == '__main__':
                                 )
 
     val_tfm = transforms.Compose([
-                                transforms.Resize(224), #added with profs
-                                transforms.CenterCrop(224), #added with profs
+                                transforms.Resize(224),
+                                transforms.CenterCrop(224),
                                 transforms.ToTensor(), 
                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
@@ -137,18 +141,22 @@ if __name__ == '__main__':
     scaler = GradScaler()
 
     if args.resume:
-        ckpt = torch.load(os.path.join(args.save_dir, 'recorder_2.pt'))
-        model.load_state_dict(ckpt['model'])
-        optimizer.load_state_dict(ckpt['optimizer'])
-        scheduler.load_state_dict(ckpt['scheduler'])
-        scaler.load_state_dict(ckpt['scaler'])
+        print('Resuming training')
+        if args.no_recorder:
+            model.load_state_dict(torch.load(args.resume_dir))
+        else:
+            ckpt = torch.load(os.path.join(args.save_dir, 'recorder_2.pt'))
+            model.load_state_dict(ckpt['model'])
+            optimizer.load_state_dict(ckpt['optimizer'])
+            scheduler.load_state_dict(ckpt['scheduler'])
+            scaler.load_state_dict(ckpt['scaler'])
 
-    if args.resume:
+
         if args.val_loss_resume == np.inf:
-            print('using val loss registered in scheduler')
+            print('using val loss registered in scheduler', scheduler.best)
             best_loss = scheduler.best
         else:
-            print('using val loss given as argument')
+            print('using val loss given as argument', args.val_loss_resume)
             best_loss = args.val_loss_resume
         print(best_loss)
         #model.load_state_dict( torch.load(os.path.join(args.save_dir, args.task , args.run_name + '.pt')))

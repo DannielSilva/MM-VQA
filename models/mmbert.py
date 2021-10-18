@@ -96,8 +96,9 @@ class Transformer(TransformerAbstract):
 class RealFormer(TransformerAbstract):
     def __init__(self, args):
         super().__init__(args)
-        print('RealFormer from abstract')
+        #i used head_cnt = 8 in RealFormer
         head_cnt = 8
+        print('RealFormer from abstract, heads', head_cnt)
         self.mains = nn.Sequential(*[ResEncoderBlock(emb_s = args.hidden_size // head_cnt, head_cnt = head_cnt, dp1 = 0.1, dp2 = 0.1) for _ in range(args.n_layers)])
     def forward(self, img, input_ids, token_type_ids, mask):
         h = self.prepare_input(img, input_ids, token_type_ids, mask)

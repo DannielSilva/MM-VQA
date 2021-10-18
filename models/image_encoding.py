@@ -64,23 +64,26 @@ class Transfer(nn.Module):
 class ResNetTransfer(Transfer):
     def __init__(self, args):
         super().__init__(args)
-    
+        self.relu = nn.ReLU()
+        self.activation = self.relu if args.use_relu else self.serf
+        print('resnet ' + 'relu' if args.use_relu else 'serf')
+
     def forward(self, img):
         modules2 = list(self.model.children())[:-2]
         fix2 = nn.Sequential(*modules2)
-        v_2 = self.gap2(self.serf(self.conv2(fix2(img)))).view(-1,self.args.hidden_size)
+        v_2 = self.gap2(self.activation(self.conv2(fix2(img)))).view(-1,self.args.hidden_size)
         modules3 = list(self.model.children())[:-3]
         fix3 = nn.Sequential(*modules3)
-        v_3 = self.gap3(self.serf(self.conv3(fix3(img)))).view(-1,self.args.hidden_size)
+        v_3 = self.gap3(self.activation(self.conv3(fix3(img)))).view(-1,self.args.hidden_size)
         modules4 = list(self.model.children())[:-4]
         fix4 = nn.Sequential(*modules4)
-        v_4 = self.gap4(self.serf(self.conv4(fix4(img)))).view(-1,self.args.hidden_size)
+        v_4 = self.gap4(self.activation(self.conv4(fix4(img)))).view(-1,self.args.hidden_size)
         modules5 = list(self.model.children())[:-5]
         fix5 = nn.Sequential(*modules5)
-        v_5 = self.gap5(self.serf(self.conv5(fix5(img)))).view(-1,self.args.hidden_size)
+        v_5 = self.gap5(self.activation(self.conv5(fix5(img)))).view(-1,self.args.hidden_size)
         modules7 = list(self.model.children())[:-7]
         fix7 = nn.Sequential(*modules7)
-        v_7 = self.gap7(self.serf(self.conv7(fix7(img)))).view(-1,self.args.hidden_size)
+        v_7 = self.gap7(self.activation(self.conv7(fix7(img)))).view(-1,self.args.hidden_size)
         return v_2, v_3, v_4, v_5, v_7
 
 class Timm_EFfNetV2(Transfer):

@@ -73,6 +73,7 @@ if __name__ == '__main__':
     parser.add_argument('--clinicalbert', type=str, default='emilyalsentzer/Bio_ClinicalBERT')
     parser.add_argument('--dataset', type=str, default='VQA-Med', help='roco or vqamed2019')
     parser.add_argument('--cnn_encoder', type=str, default='resnet152', help='name of the cnn encoder')
+    parser.add_argument('--use_relu', action = 'store_true', default = False, help = "use ReLu")
     parser.add_argument('--transformer_model', type=str, default='transformer',choices=['transformer', 'realformer', 'feedback-transformer'], help='name of the transformer model')
     parser.add_argument('--loss', type=str, default='CrossEntropyLoss', choices=['CrossEntropyLoss', 'ASLSingleLabel'], help='loss to evaluate model on')
 
@@ -177,8 +178,9 @@ if __name__ == '__main__':
     train_tfm = transforms.Compose([
                                     
                                     #transforms.ToPILImage(),
-                                    transforms.Resize(224), #added with profs
-                                    transforms.CenterCrop(224), #added with profs
+                                    #transforms.Resize([224,224]),
+                                    transforms.Resize(224), 
+                                    transforms.CenterCrop(224), 
                                     transforms.RandomResizedCrop(224,scale=(0.75,1.25),ratio=(0.75,1.25)),
                                     transforms.RandomRotation(10),
                                     # Cutout(),
@@ -188,14 +190,16 @@ if __name__ == '__main__':
 
 
     val_tfm = transforms.Compose([#transforms.ToPILImage(),
-                                transforms.Resize(224), #added with profs
-                                transforms.CenterCrop(224), #added with profs
+                                #transforms.Resize([224,224]),
+                                transforms.Resize(224),
+                                transforms.CenterCrop(224),
                                 transforms.ToTensor(), 
                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
     test_tfm = transforms.Compose([#transforms.ToPILImage(),
-                                transforms.Resize(224), #added with profs
-                                transforms.CenterCrop(224), #added with profs
+                                #transforms.Resize([224,224]),
+                                transforms.Resize(224),
+                                transforms.CenterCrop(224),
                                 transforms.ToTensor(), 
                                  transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 

@@ -62,6 +62,7 @@ if __name__ == '__main__':
     parser.add_argument('--clinicalbert', type=str, default='emilyalsentzer/Bio_ClinicalBERT')
     parser.add_argument('--dataset', type=str, default='VQA-Med', help='roco or vqamed2019')
     parser.add_argument('--cnn_encoder', type=str, default='resnet152', help='name of the cnn encoder')
+    parser.add_argument('--use_relu', action = 'store_true', default = False, help = "use ReLu")
     parser.add_argument('--transformer_model', type=str, default='transformer',choices=['transformer', 'realformer', 'feedback-transformer'], help='name of the transformer model')
 
     args = parser.parse_args()
@@ -107,8 +108,8 @@ if __name__ == '__main__':
 
     model.classifier[2] = nn.Linear(args.hidden_size, num_classes)
 
-    if args.use_pretrained:
-        model.load_state_dict(torch.load(args.model_dir))
+    print('Loading model at ', args.model_dir)
+    model.load_state_dict(torch.load(args.model_dir))
 
         
     model.to(device)
@@ -170,11 +171,11 @@ if __name__ == '__main__':
     test_df['preds'] = predictions
     test_df['decode_preds'] = test_df['preds'].map(idx2ans)
     test_df['decode_ans'] = test_df['answer'].map(idx2ans)
-    test_df.to_csv(f'ImageClef-2019-VQA-Med/mmbert/{model_name}_test_mlm_preds.csv', index = False)
+    test_df.to_csv(f'../ImageClef-2019-VQA-Med/mmbert/{model_name}_preds.csv', index = False)
     
     result = test_df[['img_id', 'decode_preds']]
     result['img_id'] = result['img_id'].apply(lambda x: x.split('/')[-1].split('.')[0])
-    result.to_csv(f'ImageClef-2019-VQA-Med/mmbert/{model_name}_res.txt', index = False, header=False, sep='|')
+    result.to_csv(f'../ImageClef-2019-VQA-Med/mmbert/{model_name}_res.txt', index = False, header=False, sep='|')
     print('acc', acc)
     print('bleu', bleu)
 

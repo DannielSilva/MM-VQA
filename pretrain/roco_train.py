@@ -98,18 +98,18 @@ if __name__ == '__main__':
     # Be careful with the transforms. These medical images must remain meaningful after transform
 
     train_tfm = transforms.Compose([
-                                
-                                transforms.Resize(224), #added with profs
-                                transforms.CenterCrop(224), #added with profs
+                                #transforms.Resize([224,224]),
+                                transforms.Resize(224), 
+                                transforms.CenterCrop(224),
                                 transforms.RandomResizedCrop(224,scale=(0.95,1.05),ratio=(0.95,1.05)),
                                 transforms.RandomRotation(5),
                                 transforms.ColorJitter(brightness=0.05,contrast=0.05,saturation=0.05,hue=0.05),
                                 transforms.ToTensor(), 
                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-    val_tfm = transforms.Compose([
-                                transforms.Resize(224), #added with profs
-                                transforms.CenterCrop(224), #added with profs
+    val_tfm = transforms.Compose([#transforms.Resize([224,224]),
+                                transforms.Resize(224),
+                                transforms.CenterCrop(224),
                                 transforms.ToTensor(), 
                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
