@@ -93,6 +93,8 @@ class Timm_EFfNetV2(Transfer):
         self.relu = nn.ReLU()
         self.activation = self.relu if args.use_relu else self.serf
         print('timm ' + 'relu' if args.use_relu else 'serf')
+
+        self.grad_cam = args.grad_cam if hasattr(args, 'grad_cam') else False
         
 
     def forward(self, img):
@@ -102,12 +104,28 @@ class Timm_EFfNetV2(Transfer):
         v_1 = self.gap3(self.activation(self.conv3(o[1]))).view(-1,self.args.hidden_size)
         v_2 = self.gap4(self.activation(self.conv4(o[2]))).view(-1,self.args.hidden_size)
         v_3 = self.gap5(self.activation(self.conv5(o[3]))).view(-1,self.args.hidden_size)
+
+        # register the hook
+        if self.grad_cam:
+            h = o[4].register_hook(self.activations_hook)
+            self.feat = o[4]
+
         v_4 = self.gap7(self.activation(self.conv7(o[4]))).view(-1,self.args.hidden_size)
         #import IPython; IPython.embed(); import sys; sys.exit(0)
         return v_0, v_1, v_2, v_3, v_4
         #return F.normalize(v_0, dim=1),  F.normalize(v_1, dim=1), F.normalize(v_2, dim=1), F.normalize(v_3, dim=1), F.normalize(v_4, dim=1)
 
+    ### grad methods ###
+    def activations_hook(self, grad):
+        self.gradients = grad
 
+    # method for the gradient extraction
+    def get_activations_gradient(self):
+        return self.gradients
+    
+    # method for the activation exctraction
+    def get_activations(self):
+        return self.feat
 
 class EffNetV2Transfer(Transfer):
     def __init__(self, args):
