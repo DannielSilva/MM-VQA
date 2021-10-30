@@ -21,21 +21,19 @@ Command line arguments:
 | Parameter                 | Default       | Training/Testing       | Description   |	
 | :------------------------ |:-------------:|:----------------------:| :-------------|
 | --run_name        	      |	              | both                   | 
-<!--| --mixed_precision         |               | both                   | use mixed-precision operations -->
 | --lr              	      |	 	            | training               | learning rate
-<!--| --category      		      |    	          | both                   | category of questions to consider -->
 | --batch_size     		      |    	          | training                 | batch size 
 | --num_vis        		      |   	          | both                     | number of visual tokens 
-| --hidden_size        		  |  768          | both                     | dimensionality for the transformer/realformer hidden states 
+| --hidden_size        		  |               | both                     | dimensionality for the transformer/realformer hidden states 
 | --use_pretrained        	|   	          | both                     | flag to load model in fine-tuning and testing
 | --con_task                |   	          | pre-train                | contrastive learn task (```simclr``` or ```supcon```)
 | --similarity              |   	          | pre-train                | similarity measure between captions for supcon
 | --transformer_model       |   	          | both                     | transformer or realformer architecture
 | --cnn_encoder             |   	          | both                     | ResNet152 or EfficientNetV2
 
+<!--| --category      		      |    	          | both                   | category of questions to consider -->
+<!--| --mixed_precision         |               | both                   | use mixed-precision operations -->
 ## Pre-train on the ROCO dataset
-
-Download the [ROCO dataset](https://www.kaggle.com/virajbagal/roco-dataset)
 
 Example for pre-training model on ROCO with supervised contrastive loss with sentence-bert similarity
 ```
@@ -50,8 +48,16 @@ python -u pretrain/roco_train.py -r='mlm-only_roco_run_name' --num_vis=5 --save_
 
 ## Datasets and trained models
 
-1) The Radiology Objects in COntext (ROCO) dataset: https://github.com/razorx89/roco-dataset 
+1) The Radiology Objects in COntext (ROCO) dataset: https://www.kaggle.com/virajbagal/roco-dataset
+    
+    a) Download the already processed vocabulary file with medical keywords for the MLM objective [med_vocab.pkl](https://drive.google.com/file/d/1Crd6cYfurb82FOFBcTcehFpmidOfHGfl/view?usp=sharing) - code used in preprocess/roco_data.py
 
+    b) Replace the traindata.csv in roco/train/radiology with the following with backtranslation also for SupCon: [traindata.csv](https://drive.google.com/file/d/1hXcIzB56Re7xCKjAOQ_bB8pgeu_BLiuh/view?usp=sharing) - code used in preprocess/translate_transformers.py
+ 
 2) The VQA-Med 2019 dataset: https://github.com/abachaa/VQA-Med-2019
 
-3) Pretrained models are available here: ...  
+3) Pretrained models are available here: 
+
+    a) Model pre-trained with supervised contrastive loss with sentence-bert similarity + batch 48 + patience 80 [here](https://drive.google.com/file/d/1lqWkLqTv9AdLg1hlDzT77I3wj7rfA0W1/view?usp=sharing) - achieving 62.80% acc. 64.32% BLEU.
+
+    b) ...
