@@ -7,30 +7,45 @@ Abstract: *Models for Visual Question Answering (VQA) on medical images should a
 ## Train and evaluate on the VQA-Med 2019 dataset
 
 ```
-python train.py --run_name give_name --mixed_precision --lr set_lr --category cat_name --batch_size 16 --num_vis set_visual_feats --hidden_size hidden_dim_size
+python vqamed2019/train.py --run_name='vqa_run_name' --cnn_encoder='tf_efficientnetv2_m' --transformer_model='realformer' --data_dir="ImageClef-2019-VQA-Med_dir" --use_pretrained --model_dir='path_to_pretrained_model' --batch_size=16 --num_vis=5 --hidden_size=768 --num_workers=16 --task='MLM' --save_dir="../ImageClef-2019-VQA-Med/mmbert" --loss='ASLSingleLabel' --epochs=100
 ```
 
 ```
-python eval.py --run_name give_name --mixed_precision --category cat_name --hidden_size hidden_dim_size --use_pretrained
+python vqamed2019/eval.py --run_name='eval-model-name' --num_vis=5 --model_dir='model_dir' --transformer='realformer' --heads=8 --cnn_encoder='tf_efficientnetv2_m'
 ```
+
+
 
 Command line arguments: 
 
 | Parameter                 | Default       | Training/Testing       | Description   |	
 | :------------------------ |:-------------:|:----------------------:| :-------------|
 | --run_name        	      |	              | both                   | 
-| --mixed_precision         |               | both                   | use mixed-precision operations
+<!--| --mixed_precision         |               | both                   | use mixed-precision operations -->
 | --lr              	      |	 	            | training               | learning rate
-| --category      		      |    	          | both                   | category of questions to consider
-| --batch_size     		      |    	          | training               | batch size 
-| --num_vis        		      |   	          | training               | number of visual tokens 
-| --hidden_size        		  |   	          | both                   | dimensionality for the transformer/realformer hidden states 
-| --use_pretrained        	|   	          | testing                |  
+<!--| --category      		      |    	          | both                   | category of questions to consider -->
+| --batch_size     		      |    	          | training                 | batch size 
+| --num_vis        		      |   	          | both                     | number of visual tokens 
+| --hidden_size        		  |  768          | both                     | dimensionality for the transformer/realformer hidden states 
+| --use_pretrained        	|   	          | both                     | flag to load model in fine-tuning and testing
+| --con_task                |   	          | pre-train                | contrastive learn task (```simclr``` or ```supcon```)
+| --similarity              |   	          | pre-train                | similarity measure between captions for supcon
+| --transformer_model       |   	          | both                     | transformer or realformer architecture
+| --cnn_encoder             |   	          | both                     | ResNet152 or EfficientNetV2
 
 ## Pre-train on the ROCO dataset
 
+Download the [ROCO dataset](https://www.kaggle.com/virajbagal/roco-dataset)
+
+Example for pre-training model on ROCO with supervised contrastive loss with sentence-bert similarity
 ```
-python ...
+python pretrain/roco_supcon_train.py -r='contrastive_roco_run_name' --con_task='supcon' --similarity='sentence_transformers' --num_vis=5 --save_dir='save_dir' --cnn_encoder='tf_efficientnetv2_m' --transformer_model='realformer' --data_dir='roco_dir'  --num_workers=16 --batch_size=16 --mlm_prob=0.15 --task='MLM'
+```
+
+Example for pre-training with MLM objective only in ROCO
+
+```
+python -u pretrain/roco_train.py -r='mlm-only_roco_run_name' --num_vis=5 --save_dir='save_dir' --cnn_encoder='tf_efficientnetv2_m' --transformer_model='realformer' --data_dir='roco_dir'  --num_workers=16 --batch_size=16 --mlm_prob=0.15 --task='MLM'
 ```
 
 ## Datasets and trained models

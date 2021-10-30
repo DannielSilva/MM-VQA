@@ -53,6 +53,7 @@ if __name__ == '__main__':
     # parser.add_argument('--weight_decay', type = float, required = False, default = 1e-2, help = " weight decay for gradients")
     parser.add_argument('--factor', type = float, required = False, default = 0.1, help = "factor for rlp")
     parser.add_argument('--patience', type = int, required = False, default = 10, help = "patience for rlp")
+    parser.add_argument('--counter', type = int, required = False, default = 20, help = "patience for remaining training")
     # parser.add_argument('--lr_min', type = float, required = False, default = 1e-6, help = "minimum lr for Cosine Annealing")
     parser.add_argument('--hidden_dropout_prob', type = float, required = False, default = 0.3, help = "hidden dropout probability")
     parser.add_argument('--smoothing', type = float, required = False, default = None, help = "label smoothing")
@@ -260,8 +261,13 @@ if __name__ == '__main__':
                         f'{args.category}_acc': acc,
                         f'{args.category}_bleu': bleu}) 
 
+        #save by val loss
+        if val_loss < best_loss:
+            print('Saving model by loss')
+            torch.save(model.state_dict(), os.path.join(args.save_dir, args.task , args.run_name + "_loss" + '.pt'))
+            best_loss = val_loss
 
-
+        #save by accuracy in val
         if not args.category:
 
             if val_acc['val_total_acc'] > best_acc1:
@@ -284,6 +290,7 @@ if __name__ == '__main__':
             best_acc2 = best_acc1
         else:
             counter+=1
-            if counter > 20:
+            print(f'Counter {counter}/{args.counter}')
+            if counter > args.counter:
                 print('Counter expired, finishing.')
                 break      
