@@ -58,6 +58,6 @@ python -u pretrain/roco_train.py -r='mlm-only_roco_run_name' --num_vis=5 --save_
 
 3) Pretrained models are available here: 
 
-    a) Model pre-trained with supervised contrastive loss leveraging sentence-bert similarity scores + batch 48 + patience 80 [here](https://drive.google.com/file/d/1lqWkLqTv9AdLg1hlDzT77I3wj7rfA0W1/view?usp=sharing) - achieving 62.80% acc. 64.32% BLEU.
+    a) [Model](https://drive.google.com/file/d/1lqWkLqTv9AdLg1hlDzT77I3wj7rfA0W1/view?usp=sharing) pre-trained with supervised contrastive loss leveraging sentence-bert similarity scores + batch 48 + patience 80 - achieves 62.80% accuracy and 64.32% BLEU.
 
     b) ...
