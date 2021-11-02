@@ -52,12 +52,12 @@ python -u pretrain/roco_train.py -r='mlm-only_roco_run_name' --num_vis=5 --save_
     
     a) Download the already processed vocabulary file with medical keywords for the MLM objective [med_vocab.pkl](https://drive.google.com/file/d/1Crd6cYfurb82FOFBcTcehFpmidOfHGfl/view?usp=sharing) - code used in preprocess/roco_data.py
 
-    b) Replace the traindata.csv in roco/train/radiology with the following with backtranslation also for SupCon: [traindata.csv](https://drive.google.com/file/d/1hXcIzB56Re7xCKjAOQ_bB8pgeu_BLiuh/view?usp=sharing) - code used in preprocess/translate_transformers.py
+    b) Replace the file traindata.csv in roco/train/radiology with the following one, in order to consider back-translation also for SupCon: [traindata.csv](https://drive.google.com/file/d/1hXcIzB56Re7xCKjAOQ_bB8pgeu_BLiuh/view?usp=sharing) - code used in preprocess/translate_transformers.py
  
 2) The VQA-Med 2019 dataset: https://github.com/abachaa/VQA-Med-2019
 
 3) Pretrained models are available here: 
 
-    a) Model pre-trained with supervised contrastive loss with sentence-bert similarity + batch 48 + patience 80 [here](https://drive.google.com/file/d/1lqWkLqTv9AdLg1hlDzT77I3wj7rfA0W1/view?usp=sharing) - achieving 62.80% acc. 64.32% BLEU.
+    a) Model pre-trained with supervised contrastive loss leveraging sentence-bert similarity scores + batch 48 + patience 80 [here](https://drive.google.com/file/d/1lqWkLqTv9AdLg1hlDzT77I3wj7rfA0W1/view?usp=sharing) - achieving 62.80% acc. 64.32% BLEU.
 
     b) ...
