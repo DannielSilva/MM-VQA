@@ -28,7 +28,7 @@ Command line arguments:
 | --use_pretrained        	|   	          | both                     | flag to load model in fine-tuning and testing
 | --con_task                |   	          | pre-train                | contrastive learn task (```simclr``` or ```supcon```)
 | --similarity              |   	          | pre-train                | similarity measure between captions for supcon
-| --transformer_model       |   	          | both                     | transformer or realformer architecture
+| --transformer_model       |   	          | both                     | Transformer or RealFormer architecture
 | --cnn_encoder             |   	          | both                     | ResNet152 or EfficientNetV2
 
 <!--| --category      		      |    	          | both                   | category of questions to consider -->
