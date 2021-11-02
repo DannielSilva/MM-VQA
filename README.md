@@ -35,12 +35,12 @@ Command line arguments:
 <!--| --mixed_precision         |               | both                   | use mixed-precision operations -->
 ## Pre-train on the ROCO dataset
 
-Example for pre-training model on ROCO with supervised contrastive loss with sentence-bert similarity
+Example showing how to do model pre-training on ROCO, with the supervised contrastive loss leveraging sentence-bert similarity scores.
 ```
 python pretrain/roco_supcon_train.py -r='contrastive_roco_run_name' --con_task='supcon' --similarity='sentence_transformers' --num_vis=5 --save_dir='save_dir' --cnn_encoder='tf_efficientnetv2_m' --transformer_model='realformer' --data_dir='roco_dir'  --num_workers=16 --batch_size=16 --mlm_prob=0.15 --task='MLM'
 ```
 
-Example for pre-training with MLM objective only in ROCO
+Example showing how to do model pre-training on ROCO, only with the MLM objective
 
 ```
 python -u pretrain/roco_train.py -r='mlm-only_roco_run_name' --num_vis=5 --save_dir='save_dir' --cnn_encoder='tf_efficientnetv2_m' --transformer_model='realformer' --data_dir='roco_dir'  --num_workers=16 --batch_size=16 --mlm_prob=0.15 --task='MLM'
