@@ -6,6 +6,8 @@ Abstract: *Models for Visual Question Answering (VQA) on medical images should a
 
 ## Model pre-training on the ROCO dataset
 
+Model pre-training can be done in two settings, with Masked Language Modeling objective in [pretrain/roco_train.py](https://github.com/DannielSilva/MMBERT/blob/main/pretrain/roco_train.py) or Masked Language Modeling + Contrastive Learning in [pretrain/roco_supcon_train.py](https://github.com/DannielSilva/MMBERT/blob/main/pretrain/roco_supcon_train.py).
+
 Example showing how to do model pre-training on ROCO, with the supervised contrastive loss leveraging sentence-bert similarity scores.
 ```
 python pretrain/roco_supcon_train.py -r='contrastive_roco_run_name' --con_task='supcon' --similarity='sentence_transformers' --num_vis=5 --save_dir='save_dir' --cnn_encoder='tf_efficientnetv2_m' --transformer_model='realformer' --data_dir='roco_dir'  --num_workers=16 --batch_size=16 --mlm_prob=0.15 --task='MLM'
@@ -32,16 +34,25 @@ python vqamed2019/eval.py --run_name='eval-model-name' --num_vis=5 --model_dir='
 
 | Parameter                 | Default       | Training/Testing       | Description   |	
 | :------------------------ |:-------------:|:----------------------:| :-------------|
-| --run_name        	      |	              | both                   | 
-| --lr              	      |	 	            | training               | learning rate
-| --batch_size     		      |    	          | training                 | batch size 
-| --num_vis        		      |   	          | both                     | number of visual tokens 
-| --hidden_size        		  |               | both                     | dimensionality for the transformer/realformer hidden states 
-| --use_pretrained        	|   	          | both                     | flag to load model in fine-tuning and testing
-| --con_task                |   	          | pre-train                | contrastive learn task (```simclr``` or ```supcon```)
-| --similarity              |   	          | pre-train                | similarity measure between captions for supcon
-| --transformer_model       |   	          | both                     | Transformer or RealFormer architecture
-| --cnn_encoder             |   	          | both                     | ResNet152 or EfficientNetV2
+| --run_name        	      |	              | both                   |  run name here for [wandb](https://wandb.ai) analysis
+| --lr              	      |	2e-5  / 1e-4         | pre-train/fine-tuning              | learning rate
+| --batch_size     		      |   16     | training                 | batch size 
+| --epochs     		      |   100     | fine-tuning                 | number of epochs 
+| --counter     		          |   20     | fine-tuning                 | number of epochs to wait for early stop
+| --use_pretrained        	          |      | fine-tuning                      | flag to load model in fine-tuning and testing
+| --mlm_prob        	      |  0.15  | pre-train                     | prob for MLM objective
+| --model_dir        	      |   	          | both                     | path to model
+| --data_dir        	      |   	          | both                     | path to dataset (ROCO or VQA-MED ImageCLEF2019)
+| --save_dir        	      |   	          | both                     | path to save model
+| --con_task                | ```supcon``` | pre-train                | contrastive learn task (```simclr``` or ```supcon```)
+| --similarity                | ```jaccard_similarity```        | pre-train                | similarity measure between captions for SupCon (```jaccard```,```sentence_transformers```)
+| --num_vis        		      |  5  | both                     | number of visual tokens 
+| --hidden_size        		  | 768   | both                     | dimensionality for the transformer/realformer hidden states 
+| --transformer_model       |  ```transformer```  | both                     | Transformer or RealFormer architecture
+| --cnn_encoder             |   ```resnet152```	 | both                     | ResNet152 (```resnet152```) or EfficientNetV2 (```tf_efficientnetv2_m```)
+| --use_relu             |   ```False```	 | both                     | flag if set replaces SERF acivation function with ReLU
+| --loss             |   ```CrossEntropyLoss```	 | fine-tuning                     | Cross Entropy loss (```CrossEntropyLoss```) or Asymmetric Loss (```ASLSingleLabel```)
+
 <!--| --category      		      |    	          | both                   | category of questions to consider -->
 <!--| --mixed_precision         |               | both                   | use mixed-precision operations -->
 
@@ -58,6 +69,21 @@ python vqamed2019/eval.py --run_name='eval-model-name' --num_vis=5 --model_dir='
 
 3) Pretrained models are available here: 
 
-    a) [Model](https://drive.google.com/file/d/1lqWkLqTv9AdLg1hlDzT77I3wj7rfA0W1/view?usp=sharing) pre-trained with supervised contrastive loss leveraging sentence-bert similarity scores + batch 48 + patience 80 - achieves 62.80% accuracy and 64.32% BLEU.
+  <!--  a) [Model](https://drive.google.com/file/d/1lqWkLqTv9AdLg1hlDzT77I3wj7rfA0W1/view?usp=sharing) pre-trained with supervised contrastive loss leveraging sentence-bert similarity scores + batch 48 + patience 80 - achieves 62.80% accuracy and 64.32% BLEU.
 
-    b) ...
+    b) ... -->
+
+| Image Encoder  | Architecture | Activation | Loss | Pretraining task | Accuracy | BLEU | Link |
+| :------------------------ |:-------------:|:----------------------:| :-------------:|  :-------------:| :-------------:| :-------------:| :-------------|
+|ResNet152 | Transformer | ReLU | CE | MLM | 58.80 | 60.74 | [Here](https://drive.google.com/file/d/1FMLh8LJICTVcHkKKNUfeWTkAY90HetZ7/view?usp=sharing) | |
+|Effic.NetV2      | Transformer  | ReLU                | CE | MLM        | 59.40    | 61.36 | [Here](https://drive.google.com/file/d/1v9XK1Bw3QrJvHlUUOpWok8weCOxL2ELv/view?usp=sharing) | |
+|Effic.NetV2      | RealFormer  | ReLU                | CE  | MLM         | 59.20    | 61.52 | [Here](https://drive.google.com/file/d/1AOSlTy7LVid7OCUQ5mpuSYcvMJI2BnG1/view?usp=sharing) | |
+|Effic.NetV2      | RealFormer  | SERF                | CE   | MLM      | 60.00   | 62.39  | [Here](https://drive.google.com/file/d/1GBXytRhaljDYZytRz8A1l2vn_hkpoDTP/view?usp=sharing) | |
+|Effic.NetV2 | RealFormer   | SERF            | ASL     | MLM         | 59.80    | 61.55 | [Here](https://drive.google.com/file/d/1UtRw8ox0HY36JCu4JRnDL8Wu4_QWM6rh/view?usp=sharing) | |
+|Effic.NetV2 | RealFormer   | SERF      | ASL   | MLM + SimCLR       | 59.80    | 61.50 | [Here](https://drive.google.com/file/d/1S7iIe-iEn0l14zRmkCNn7_MiKv5BbpF3/view?usp=sharing) | |
+|Effic.NetV2 | RealFormer   | SERF       | ASL  | MLM + SupCon-J      | 60.20    | 62.50 | [Here](https://drive.google.com/file/d/1V8LUYB66gPihbIVeXlU1Nee47ON29gfF/view?usp=sharing) | |
+|Effic.NetV2 | RealFormer   | SERF      | ASL | MLM + SupCon-SB      | 60.60    | 62.98 | [Here](https://drive.google.com/file/d/15ldq2Gn-EyoJUj3gO8SiMgYhI2aZ_oeG/view?usp=sharing) | |
+|Effic.NetV2 | RealFormer   | SERF      | ASL  | MLM + SupCon-SB            | 61.60†    | 63.72† | [Here](https://drive.google.com/file/d/15STLuQ4cwcNiPIb2VilP4hvQiPn5Az9f/view?usp=sharing) | |
+|Effic.NetV2 | RealFormer   | SERF           | ASL | MLM + SupCon-SB            | 62.80†*    | 64.32†* | [Here](https://drive.google.com/file/d/1WerXfF5ve9T9Bt309Fal5QHeaV7jpSq_/view?usp=sharing) | |
+
+Notation: † represents a model where the batch size was set to 48 (vs 16 in the rest), and * represents a model where the patience was set to 80.
