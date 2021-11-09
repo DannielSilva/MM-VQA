@@ -41,7 +41,7 @@ python vqamed2019/eval.py --run_name='eval-model-name' --num_vis=5 --model_dir='
 | --counter     		          |   20     | fine-tuning                 | number of epochs to wait for early stop
 | --use_pretrained        	          |      | fine-tuning                      | flag to load model in fine-tuning and testing
 | --mlm_prob        	      |  0.15  | pre-train                     | prob for MLM objective
-| --model_dir        	      |   	          | both                     | path to model
+| --model_dir        	      |   	          | fine-tuning and testing                     | path to an already saved model
 | --data_dir        	      |   	          | both                     | path to dataset (ROCO or VQA-MED ImageCLEF2019)
 | --save_dir        	      |   	          | both                     | path to save model
 | --con_task                | ```supcon``` | pre-train                | contrastive learn task (```simclr``` or ```supcon```)
