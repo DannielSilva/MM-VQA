@@ -38,7 +38,7 @@ if __name__ == '__main__':
     parser.add_argument('--hidden_size', type=int, default=768, help='embedding size')
     parser.add_argument('--hidden_dropout_prob', type=float, default=0.3, help='dropout')
     parser.add_argument('--n_layers', type=int, default=4, help='num of heads in multihead attenion')
-    parser.add_argument('--heads', type=int, default=12, help='num of bertlayers')
+    parser.add_argument('--heads', type=int, default=8, help='num of bertlayers')
     parser.add_argument('--vocab_size', type=int, default=30522, help='vocabulary size')
 
     parser.add_argument('--task', type=str, default='MLM',
@@ -92,19 +92,37 @@ if __name__ == '__main__':
 
 
     img_path = os.path.join(args.data_dir,args.mode,'images',args.vqa_img)
-    df=train_df.loc[train_df['img_id'] == img_path]
+    #import IPython; IPython.embed(); import sys; sys.exit(0)
+    info_df=df.loc[df['img_id'] == img_path]
 
-    category_df=df.loc[df['category'] == args.category]
+    category_df=info_df.loc[info_df['category'] == args.category]
     question = category_df['question'].item()
     answer = category_df['answer'].item()
     
-
-    model = Model(args)
-    model.classifier[2] = nn.Linear(args.hidden_size, num_classes)
-    target_layers = model.transformer.mains[3].ff[3]#model.fc1#model.transformer.mains[-3]#model.transformer.trans.model.blocks[6][4]#
+    # model = Model(args)
+    # model.classifier[2] = nn.Linear(args.hidden_size, num_classes)
+    # target_layers = model.transformer.mains[3].ff[3]#model.fc1#model.transformer.mains[-3]#model.transformer.trans.model.blocks[6][4]#
     #model = timm.create_model('tf_efficientnetv2_m', pretrained=True)
     #model.classifier = torch.nn.Sequential()
     #target_layers = model.blocks[6][4]
+    model = Model(args)
+    model.classifier[2] = nn.Linear(args.hidden_size, num_classes)
+    model.load_state_dict(torch.load(args.model_dir))
+
+    effv2 = timm.create_model('tf_efficientnetv2_m', pretrained=True) #model.transformer.trans.model
+    effv2.classifier = torch.nn.Sequential()
+
+    print('Loading weights from', args.model_dir)
+    effv2_dict = effv2.state_dict()
+    pretrained_dict = model.transformer.trans.model.state_dict()
+    # 1. filter out unnecessary keys
+    pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in effv2_dict}
+    # 2. overwrite entries in the existing state dict
+    effv2_dict.update(pretrained_dict) 
+    # 3. load the new state dict
+    effv2.load_state_dict(effv2_dict)
+    
+    target_layers = effv2.blocks[-1][-1]
     print( target_layers)
     
 
@@ -115,7 +133,7 @@ if __name__ == '__main__':
         ])
         return preprocessing(img.copy()).unsqueeze(0)
     
-    rgb_img = cv2.imread(args.img, 1)[:, :, ::-1] #dog_cat.jfif - synpic371.jpg'
+    rgb_img = cv2.imread(img_path, 1)[:, :, ::-1] #dog_cat.jfif - synpic371.jpg'
     rgb_img = cv2.resize(rgb_img, (224, 224))
     rgb_img = np.float32(rgb_img) / 255
     img_tensor = preprocess_image(rgb_img, mean=[0.5, 0.5, 0.5],
@@ -125,43 +143,29 @@ if __name__ == '__main__':
     tokens, segment_ids, input_mask= encode_text(question, tokenizer, args)
     tokens, segment_ids, input_mask = torch.tensor(tokens, dtype = torch.long).unsqueeze(dim=0), torch.tensor(segment_ids, dtype = torch.long).unsqueeze(dim=0), torch.tensor(input_mask, dtype = torch.long).unsqueeze(dim=0)
 
-    h = model.transformer.prepare_input(img_tensor, tokens, segment_ids, input_mask)
-
-    # out = model(h)
-
+    #h = model.transformer.prepare_input(img_tensor, tokens, segment_ids, input_mask)
+    #out = model(h)
+    
+    print('out.shape', model(img_tensor, tokens, segment_ids, input_mask)[0].shape)
 
     # Construct the CAM object once, and then re-use it on many images:
-    def reshape_transform(tensor, height=16, width=16,channels=3):
-        print('tensor shape',tensor.shape)
-        result = tensor[:, 5  , :].reshape(tensor.size(0),
-        3, height, width)
-
-        # result = tensor[:, 1 : 6  , :].reshape(tensor.size(0),
-        # 5*3, height, width)
-
-        #result = tensor.unsqueeze(dim=1).unsqueeze(dim=1)
-        
-        # result = tensor.reshape(tensor.size(0),
-        # channels, height, width)
-        return result
     print('Using ' + args.method)
-    print('reshape', reshape_transform(torch.rand(2,28,768)).shape)
-    cam = methods[args.method](model=model, target_layer=target_layers, use_cuda=False,reshape_transform=reshape_transform)
+    cam = methods[args.method](model=effv2, target_layer=target_layers, use_cuda=False)
 
 
     # If target_category is None, the highest scoring category
     # will be used for every image in the batch.
     # target_category can also be an integer, or a list of different integers
     # for every image in the batch.
-    target_category = answer#None#281
+    target_category = None#answer#None#281
 
     #import IPython; IPython.embed(); import sys; sys.exit(0)
     # You can also pass aug_smooth=True and eigen_smooth=True, to apply smoothing.
-    grayscale_cam = cam(input_tensor=h, target_category=target_category)
+    grayscale_cam = cam(input_tensor=img_tensor, target_category=target_category)
 
     # In this example grayscale_cam has only one image in the batch:
     grayscale_cam = grayscale_cam[0, :]
     visualization = show_cam_on_image(rgb_img, grayscale_cam, use_rgb=False)
 
     print('Writing output file to ',args.output)
-    cv2.imwrite(args.output + args.model_dir.split('/')[-1] + ".jpg", visualization)
+    cv2.imwrite(args.output + '_' + args.vqa_img + '_' + args.model_dir.split('/')[-1] + ".jpg", visualization)
