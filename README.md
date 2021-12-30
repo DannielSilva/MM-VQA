@@ -1,4 +1,4 @@
-# ECIR Submission - MMBERT Reproducibiliy Study
+# Paper Submission - MMBERT Reproducibiliy and Extension Study
 
 ## Extending the MMBERT Model for Medical Visual Question Answering
 
