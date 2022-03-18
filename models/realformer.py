@@ -27,7 +27,7 @@ class ResEncoderBlock(nn.Module):
         )
         print('Using SERF')
 
-    def resmha(self, x, prev = None):
+    def resmha(self, x, prev = None, mask = None):
         B, T, _ = x.shape
         x = x.reshape(B, T, self.head_cnt, self.emb_s)
         k, q, v = torch.split(self.kqv(x), self.emb_s, dim = -1) # B, T, h, emb_s
@@ -35,14 +35,17 @@ class ResEncoderBlock(nn.Module):
             att_score = torch.einsum('bihk,bjhk->bijh', q, k)/self.emb_s**0.5 + prev
         else:
             att_score = torch.einsum('bihk,bjhk->bijh', q, k)/self.emb_s**0.5
-
+        if mask is not None:
+            #mask = mask[:, None, None, :].float()
+            mask = mask.unsqueeze(-1).unsqueeze(-1).expand(att_score.size()).float()
+            att_score -= 10000.0 * (1.0 - mask)
         prev = att_score
         att = F.softmax(prev, dim = 2) #B, T, T, h sum on dim 1 = 1
         res = torch.einsum('btih,bihs->bths', att, v).reshape(B, T, -1) #B, T, h * emb_s
         return self.dp(self.proj(res)), prev
     
-    def forward(self, x, prev = None): ## add & norm later.
-        rmha, prev =  self.resmha(x, prev = prev)
+    def forward(self, x, prev = None, mask = None): ## add & norm later.
+        rmha, prev =  self.resmha(x, prev = prev, mask = mask)
         x = self.ln1(x + rmha)
         x = self.ln2(x + self.ff(x))
 

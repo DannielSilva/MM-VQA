@@ -104,7 +104,7 @@ class RealFormer(TransformerAbstract):
         h = self.prepare_input(img, input_ids, token_type_ids, mask)
         prev = None
         for resencoder in self.mains:
-            h, prev = resencoder(h, prev = prev)
+            h, prev = resencoder(h, prev = prev, mask = mask)
         return h
 
 class FeedBackTransformer(TransformerAbstract):
@@ -154,7 +154,7 @@ class Model(nn.Module):
                 pooled_h = self.activ1(self.fc1(h))
                 logits = self.classifier(pooled_h)
                 if self.supcon: #if supcon, also return the features for the supcon loss
-                    feat = F.normalize(self.head(h.mean(1)), dim=1) #reduce dimensions of the features and normalize
+                    feat = F.normalize(self.head(mean_pooling(h, input_mask)), dim=1) #reduce dimensions of the features and normalize
                     return logits, feat
             elif self.task == 'distillation':
                 logits = h
@@ -162,9 +162,14 @@ class Model(nn.Module):
 
         elif self.dataset == 'VQA-Med':
             h = self.transformer(img, input_ids, segment_ids, input_mask)
-            pooled_h = self.activ1(self.fc1(h.mean(1)))
+            pooled_h = self.activ1(self.fc1(mean_pooling(h, input_mask)))
             logits = self.classifier(pooled_h)
             return logits, 0,0
+
+def mean_pooling(token_embeddings, attention_mask):
+    # this is for an huggingface model -> token_embeddings = model_output[0] #First element of model_output contains all token embeddings
+    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 '''
 class Transformer(nn.Module):
     def __init__(self, args):
